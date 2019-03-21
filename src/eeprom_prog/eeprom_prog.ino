@@ -21,6 +21,8 @@
 
 #define REFRESH_SPEED 150
 
+#define SERIAL_ERRORS true
+
 const byte pinRows = 4;
 const byte pinCols = 4;
 const byte outputPins[pinRows] = {13, 12, 11, 10};
@@ -95,7 +97,7 @@ unsigned int currentMemValue = 0;
 unsigned int changedValue = 0;
 byte memRead = EEPROM_READ_FAILURE;
 bool memoryReadfailure = true;
-byte tempMemoryEdit = 0;
+unsigned int tempMemoryEdit = 0;
 
 unsigned char currentMode = 0;
 bool modeHex = true;
@@ -132,6 +134,9 @@ byte getDigit(unsigned int inputNumber, byte loc, byte exponent) {
   if (loc > 0) {
     return (inputNumber / (exponent * loc) % exponent);
   } else if (loc < 0) {
+    if (SERIAL_ERRORS && Serial) {
+      Serial.print("\ngetDigit(): Error: Index out of bounds.\n");
+    }
     return 0;
   }
   
@@ -141,40 +146,40 @@ byte getDigit(unsigned int inputNumber, byte loc, byte exponent) {
 unsigned int setDigit(unsigned int inputNumber, byte newDigit, byte loc, byte exponent) {
   const byte maxSize = 32;
 
-  byte numberSize = (inputNumber == 0 ? 1 : 0);
-  unsigned int nSize = inputNumber;
-  while (nSize != 0 && numberSize < maxSize) {
-    nSize /= exponent;
-    numberSize++;
-  }
-  
-  if (loc > maxSize || loc > numberSize || loc < 0) {
+  String inputString = "";
+
+  if (loc > maxSize || loc < 0) {
+    if (SERIAL_ERRORS && Serial) {
+      Serial.print("\nsetDigit(): Error: Index out of bounds.\n");
+    }
     return inputNumber;
   }
-  
-  char *numberArray = calloc((int)numberSize, sizeof(char));
 
-  unsigned int i = 0;
-  unsigned int nCount = inputNumber;
-  
-  while (nCount != 0 && i < numberSize) {
-    numberArray[i] = nCount % exponent;
-    nCount /= exponent;
-    i++;
-  };
+  char temp[maxSize] = {0};
+  sprintf(temp, "%d", inputNumber);
+  inputString.concat(temp);
 
-  numberArray[loc] = (newDigit % exponent);
+  Serial.print("\n inputString1   ");
+  Serial.print(inputString);
+  
+  char replaceNum[maxSize] = {0};
+  sprintf(replaceNum, "%01d", (newDigit % exponent));
+  
+  Serial.print("\n replaceNum   ");
+  Serial.print(replaceNum);
+  
+  Serial.print("\n inputString2   ");
+  Serial.print(inputString);
+  
+  inputString[loc] = replaceNum;
+  unsigned int output = 0;
 
-  int output = 0;
-  
-  for (byte j = 0; j < numberSize; j++) {
-    output = exponent * output + numberArray[j];
-  }
-  
-  if (numberArray) {
-    free(numberArray);
-  }
-  
+  Serial.print("\n inputString3   ");
+  Serial.print(inputString);
+  output = strtol(inputString.c_str(), NULL, exponent + 1);
+  Serial.print("\n . output ");
+  Serial.print(output);
+  Serial.print(" \n");
   return output;
 }
 
@@ -184,7 +189,7 @@ void exEepromWriteByte(int deviceAddress, unsigned int memAddress, byte data) {
   Wire.beginTransmission(deviceAddress);
   Wire.write((int)(memAddress >> 8)); // MSB
   Wire.write((int)(memAddress & 0xFF)); // LSB
-  Wire.write(rdata);
+  Wire.write(rdata & 0xFF);
   Wire.endTransmission();
   delay(25);
 }
@@ -446,18 +451,19 @@ void numericAddressInputMode() {
   }
   
   if (ioMod.getButtons() == 0b00000001) {
-    byte tmpDigit = getDigit(currentAddress, ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight), modeHex ? 0xF : 0xA);
-    if (tmpDigit == (modeHex ? 0xF : 0xA)) {
-      tmpDigit = 0;
-    } else {
+    unsigned int tmpDigit = getDigit(currentAddress, ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight), modeHex ? 0xF : 0xA);
+//    if (tmpDigit == (modeHex ? 0xF : 0xA)) {
+//      tmpDigit = 0;
+//    } else {
       tmpDigit++;
-    }
+//    }
+    
     setNewAddress(setDigit(currentAddress, tmpDigit, ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight), modeHex ? 0xF : 0xA));
     addrBuffer[editingNumericDigitLight]++;
   }
 
   if (ioMod.getButtons() == 0b00000010) {
-    byte tmpDigit = getDigit(currentAddress, ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight), modeHex ? 0xF : 0xA);
+    unsigned int tmpDigit = getDigit(currentAddress, ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight), modeHex ? 0xF : 0xA);
     if (tmpDigit == 0) {
       tmpDigit = modeHex ? 0xF : 0xA;
     } else {
@@ -509,29 +515,39 @@ void numericAddressInputMode() {
 void numericMemoryInput() {
 
   if (ioMod.getButtons() == 0b00000001) {
-    tempMemoryEdit = getDigit(tempMemoryEdit, (editingNumericDigitLight - HALF_SEGMENT_COUNT), modeHex ? 0xF : 0xA);
-    if (tempMemoryEdit == (modeHex ? 0xF : 0xA)) {
-      tempMemoryEdit = 0;
+    const byte editingDigit = HALF_SEGMENT_COUNT - (editingNumericDigitLight - (HALF_SEGMENT_COUNT - 1));
+    byte tmpDigit = getDigit(tempMemoryEdit, editingDigit, modeHex ? 0xF : 0xA);
+    if (tmpDigit == (modeHex ? 0xF : 0xA)) {
+      tmpDigit = 0;
     } else {
-      tempMemoryEdit++;
+      tmpDigit++;
     }
-    tempMemoryEdit = setDigit(currentAddress, tempMemoryEdit, (editingNumericDigitLight - HALF_SEGMENT_COUNT), modeHex ? 0xF : 0xA);
+    tempMemoryEdit = setDigit(tempMemoryEdit, (int)tmpDigit, editingDigit, modeHex ? 0xF : 0xA) & 0xFF;
     
     unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
     }
+
+    Serial.print("   \n  editingDigit\n");
+    Serial.print(editingDigit);
+    Serial.print("   \n  tmpDigit\n");
+    Serial.print(tmpDigit);
+    Serial.print("   \n  tempMemoryEdit\n");
+    Serial.print(tempMemoryEdit);
+    Serial.print("   \n  ");
   }
 
   if (ioMod.getButtons() == 0b00000010) {
-    tempMemoryEdit = getDigit(tempMemoryEdit, (editingNumericDigitLight - HALF_SEGMENT_COUNT), modeHex ? 0xF : 0xA);
-    if (tempMemoryEdit == 0) {
-      tempMemoryEdit = modeHex ? 0xF : 0xA;
+    const byte editingDigit = HALF_SEGMENT_COUNT - (editingNumericDigitLight - (HALF_SEGMENT_COUNT - 1));
+    byte tmpDigit = getDigit(tempMemoryEdit, editingDigit, modeHex ? 0xF : 0xA);
+    if (tmpDigit == 0) {
+      tmpDigit = modeHex ? 0xF : 0xA;
     } else {
-      tempMemoryEdit--;
+      tmpDigit--;
     }
-    tempMemoryEdit = setDigit(currentAddress, tempMemoryEdit, (editingNumericDigitLight - HALF_SEGMENT_COUNT), modeHex ? 0xF : 0xA);
+    tempMemoryEdit = setDigit(tempMemoryEdit, tmpDigit, editingDigit, modeHex ? 0xF : 0xA) & 0xFF;
     
     unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
     updateScreen(tempMemoryEditBuffer, true);
