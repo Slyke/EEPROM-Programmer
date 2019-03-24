@@ -22,6 +22,7 @@
 #define EEPROM_ADDR 0x50 // I2C Address
 #define EEPROM_READ_FAILURE 0xFF // Returned value on fail. Don't set to 0, 1 or EE_PROM_VERSION
 
+#define COMM_SPEED 19200
 #define REFRESH_SPEED 150
 
 const byte pinRows = 4;
@@ -31,6 +32,9 @@ const byte inputPins[pinCols] = {9, 8, 7, 6};
 const unsigned char displayError[4] = {14, 38, 40, 38};
 const unsigned char displayDec[4] = {16, 13, 14, 12};
 const unsigned char displayHex[4] = {16, 42, 14, 44};
+const unsigned char displayEcho[4] = {14, 12, 42, 0};
+const unsigned char displayOn[4] = {16, 16, 0, 1};
+const unsigned char displayOff[4] = {16, 0, 15, 15};
 
 // Segment labelling:
 //        A
@@ -377,8 +381,8 @@ void setup() {
   ioMod.setupDisplay(true, brightness);
 
   Wire.begin();
-  Serial.begin(19200);
-  
+  Serial.begin(COMM_SPEED);
+
   byte initialDisplay[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
   for (byte i = 0, j = 7; i < 8; i++, j--) {
     initialDisplay[i] = { 255 };
@@ -446,6 +450,7 @@ void basicAddressInputMode() {
 
   if (ioMod.getButtons() == 0b00010000) {
     currentMode = SERIAL_COMMAND;
+    Serial.println("Serial Listening...");
   }
 
   if (ioMod.getButtons() == 0b00000100 || ioMod.getButtons() == 0b00001000) {
@@ -758,6 +763,11 @@ void basicMemoryControl() {
     currentMode = BASIC_MEM_INPUT;
   }
 
+  if (ioMod.getButtons() == 0b00010000) {
+    currentMode = SERIAL_COMMAND;
+    Serial.println("Serial Listening...");
+  }
+
   if (ioMod.getButtons() == 0b10000000) {
     currentMode = BASIC_ADDR_INPUT;
     ioMod.setLED(TM1638_COLOR_RED, 0);
@@ -858,7 +868,7 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
     }
     break;
     case 0x05: {
-      if (paramsLength == 0) {char outputBuf[32];
+      if (paramsLength == 0) {
         if (serialEchoCommand) {
           Serial.println("ret");
         }
@@ -941,16 +951,15 @@ void serialCommandInput() {
     while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
       String strCurrentToken(currentToken);
       String strRemaining(remaining);
-      if (paramsLength > 1) {
-        break;
-      }
       if (currentCommand > 0) {
-        if (strCurrentToken.indexOf("0x") > -1) {
-          params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFF;
-        } else {
-          params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFF;
+        if (paramsLength < 2) { // Ignore extra
+          if (strCurrentToken.indexOf("0x") > -1) {
+            params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFFFF;
+          } else {
+            params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFFFF;
+          }
+          paramsLength++;
         }
-        paramsLength++;
         if (strRemaining.length() == 0) {
           parseSerialCommands(currentCommand, params, paramsLength);
         }
@@ -980,8 +989,22 @@ void serialCommandInput() {
           currentCommand = 0x06;
           parseSerialCommands(currentCommand, params, paramsLength);
         } else {
-          Serial.print("err 1; Unknown OP: ");
-          Serial.println(currentToken); 
+          char outputBuf[32];
+          Serial.print("err 1; Unknown OP.");
+          Serial.print(" Len: [");
+          sprintf(outputBuf, "0x%02x", strCurrentToken.length());
+          Serial.print(outputBuf);
+          Serial.print("]. Chars: [");
+          for (byte i = 0; i < strCurrentToken.length() - 1; i++) {
+            sprintf(outputBuf, "0x%02x", (byte)currentToken[i]);
+            Serial.print(outputBuf);
+            Serial.print(", ");
+          }
+          sprintf(outputBuf, "0x%02x", (byte)currentToken[strCurrentToken.length() - 1]);
+          Serial.print(outputBuf);
+          Serial.print("]: ");
+          Serial.println(currentToken);
+          break;
         }
       }
     }
@@ -1000,8 +1023,6 @@ void serialCommandInput() {
   ioMod.setLED(editingNumericDigitlightState, 5);
   ioMod.setLED(editingNumericDigitlightState, 6);
   ioMod.setLED(editingNumericDigitlightState, 7);
-
-  
 }
 
 void loop() {
@@ -1054,6 +1075,18 @@ void loop() {
 
   if (ioMod.getButtons() == 0b00010011) {
     Reset();
+  }
+
+  if (ioMod.getButtons() == 0b11010000) {
+    updateScreen(displayEcho, false);
+    if (serialEchoCommand) {
+      updateScreen(displayOff, true);
+      serialEchoCommand = false;
+    } else {
+      updateScreen(displayOn, true);
+      serialEchoCommand = true;
+    }
+    delay(1000);
   }
 
   if (serialDebugOutput && currentMode != SERIAL_COMMAND) {
