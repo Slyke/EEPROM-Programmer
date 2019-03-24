@@ -9,20 +9,20 @@
 
 #define SEGMENT_COUNT 8
 #define HALF_SEGMENT_COUNT SEGMENT_COUNT / 2
-#define SERIAL_OUTPUT true
 
 #define BASIC_ADDR_INPUT 0
 #define NUMERIC_ADDR_INPUT 1
 #define BASIC_MEM_CTRL 2
 #define BASIC_MEM_INPUT 3
 #define NUMERIC_MEM_INPUT 4
+#define SERIAL_COMMAND 5
+
+#define DEFAULT_RUN_MODE BASIC_ADDR_INPUT
 
 #define EEPROM_ADDR 0x50 // I2C Address
 #define EEPROM_READ_FAILURE 0xFF // Returned value on fail. Don't set to 0, 1 or EE_PROM_VERSION
 
 #define REFRESH_SPEED 150
-
-#define SERIAL_ERRORS true
 
 const byte pinRows = 4;
 const byte pinCols = 4;
@@ -118,6 +118,8 @@ unsigned int changedValue = 0;
 byte memRead = EEPROM_READ_FAILURE;
 bool memoryReadfailure = true;
 unsigned int tempMemoryEdit = 0;
+bool serialEchoCommand = false;
+bool serialDebugOutput = false;
 
 unsigned char currentMode = 0;
 bool modeHex = true;
@@ -423,7 +425,7 @@ void setup() {
   clearScreen(true);
   delay(20);
 
-  currentMode = BASIC_ADDR_INPUT;
+  currentMode = DEFAULT_RUN_MODE;
   editingNumericDigitLight = -1;
   ioMod.setLED(TM1638_COLOR_RED, 0);
   ioMod.setLED(TM1638_COLOR_RED, 1);
@@ -440,6 +442,10 @@ void basicAddressInputMode() {
 
   if (ioMod.getButtons() == 0b00000010) {
     setNewAddress(currentAddress - 1);
+  }
+
+  if (ioMod.getButtons() == 0b00010000) {
+    currentMode = SERIAL_COMMAND;
   }
 
   if (ioMod.getButtons() == 0b00000100 || ioMod.getButtons() == 0b00001000) {
@@ -555,6 +561,15 @@ void numericAddressInputMode() {
 }
 
 void numericMemoryInput() {
+  if (editingNumericDigitlightState == TM1638_COLOR_RED) {
+    editingNumericDigitlightState = TM1638_COLOR_NONE;
+  } else {
+    editingNumericDigitlightState = TM1638_COLOR_RED;
+  }
+  ioMod.setLED(editingNumericDigitlightState, 4);
+  ioMod.setLED(editingNumericDigitlightState, 5);
+  ioMod.setLED(editingNumericDigitlightState, 6);
+  ioMod.setLED(editingNumericDigitlightState, 7);
   if (lastKeyPress != NO_KEY) {
     const byte editingDigit = HALF_SEGMENT_COUNT - (editingNumericDigitLight - (HALF_SEGMENT_COUNT - 1));
     tempMemoryEdit = setDigit(tempMemoryEdit, keyMap[lastKeyPress], editingDigit, modeHex ? 0x10 : 10) & 0xFF;
@@ -756,6 +771,239 @@ void basicMemoryControl() {
   }
 }
 
+void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) {
+  char outputBuf[32];
+  switch(command) {
+    case 0x00: {
+      Serial.println("nop");
+    }
+    break;
+    case 0x01: {
+      if (serialEchoCommand) {
+        Serial.print("jmp");
+        sprintf(outputBuf, " 0x%04x", params[0]);
+        Serial.println(outputBuf);
+      }
+      if (paramsLength < 1) {
+        Serial.println("err 2; jmp needs 1 param");
+        break;
+      }
+      setNewAddress(params[0]);
+      sprintf(outputBuf, "0x%04x", params[0]);
+      Serial.println(outputBuf);
+    }
+    break;
+    case 0x02: {
+      if (paramsLength == 0) {
+        if (serialEchoCommand) {
+          Serial.println("get");
+        }
+        sprintf(outputBuf, "0x%04x", currentAddress);
+        Serial.print(outputBuf);
+        sprintf(outputBuf, " 0x%02x", memRead);
+        Serial.println(outputBuf);
+      } else {
+        if (serialEchoCommand) {
+          Serial.print("get ");
+          sprintf(outputBuf, "0x%02x", params[0]);
+          Serial.println(outputBuf);
+        }
+        memRead = exEepromReadByte(EEPROM_ADDR, params[0], EEPROM_READ_FAILURE);
+        sprintf(outputBuf, "0x%04x", params[0]);
+        Serial.print(outputBuf);
+        sprintf(outputBuf, " 0x%02x", memRead);
+        Serial.println(outputBuf);
+      }
+    }
+    break;
+    case 0x03: {
+      if (serialEchoCommand) {
+        Serial.print("mov ");
+        sprintf(outputBuf, "0x%04x", params[0]);
+        Serial.print(outputBuf);
+        sprintf(outputBuf, " 0x%02x", params[1] & 0xFF);
+        Serial.println(outputBuf);
+      }
+      if (paramsLength == 2) {
+        setNewAddress(params[0]);
+        exEepromWriteByte(EEPROM_ADDR, currentAddress, params[1] & 0xFF);
+        memRead = exEepromReadByte(EEPROM_ADDR, currentAddress, EEPROM_READ_FAILURE);
+        sprintf(outputBuf, "0x%04x", currentAddress);
+        Serial.print(outputBuf);
+        sprintf(outputBuf, " 0x%02x", memRead);
+        Serial.println(outputBuf);
+      } else {
+        Serial.println("err 4; mov needs 2 params");
+        break;
+      }
+    }
+    break;
+    case 0x04: {
+      if (serialEchoCommand) {
+        Serial.print("l2m ");
+        sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
+        Serial.println(outputBuf);
+      }
+      if (paramsLength == 1) {
+        exEepromWriteByte(EEPROM_ADDR, currentAddress, params[0] & 0xFF);
+        memRead = exEepromReadByte(EEPROM_ADDR, currentAddress, EEPROM_READ_FAILURE);
+        sprintf(outputBuf, "0x%04x", currentAddress);
+        Serial.print(outputBuf);
+        sprintf(outputBuf, " 0x%02x", memRead);
+        Serial.println(outputBuf);
+      } else {
+        Serial.println("err 8; l2m needs 1 params");
+        break;
+      }
+    }
+    break;
+    case 0x05: {
+      if (paramsLength == 0) {char outputBuf[32];
+        if (serialEchoCommand) {
+          Serial.println("ret");
+        }
+        Serial.print("ret ");
+        sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
+        Serial.println(outputBuf);
+        delay(10);
+        currentMode = DEFAULT_RUN_MODE;
+        ioMod.setLED(TM1638_COLOR_RED, 0);
+        ioMod.setLED(TM1638_COLOR_RED, 1);
+        ioMod.setLED(TM1638_COLOR_RED, 2);
+        ioMod.setLED(TM1638_COLOR_RED, 3);
+      } else {
+        
+        if (serialEchoCommand) {
+          Serial.print("ret ");
+          sprintf(outputBuf, "0x%02x", params[0]);
+          Serial.println(outputBuf);
+        }
+        Serial.print("ret ");
+        sprintf(outputBuf, "0x%02x", params[0]);
+        Serial.println(outputBuf);
+        delay(10);
+        currentMode = params[0];
+      }
+    }
+    break;
+    case 0x06: {
+      if (serialEchoCommand) {
+        Serial.println("rst");
+      }
+      Serial.println("RESET");
+      delay(10);
+      Reset();
+    }
+    break;
+  }
+
+  memRead = exEepromReadByte(EEPROM_ADDR, currentAddress, EEPROM_READ_FAILURE);
+  unsigned char *memBuffer = breakIntToArray((byte)memRead, modeHex);
+  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
+  updateScreen(addrBuffer, false);
+  updateScreen(memBuffer, true);
+  
+  if (addrBuffer) {
+    free(addrBuffer);
+  }
+  if (memBuffer) {
+    free(memBuffer);
+  }
+}
+
+void serialCommandInput() {
+  if (!Serial) {
+    currentMode = BASIC_ADDR_INPUT;
+    return ;
+  }
+
+  if (ioMod.getButtons() == 0b10000000 || ioMod.getButtons() == 0b01000000 || ioMod.getButtons() == 0b00100000 || ioMod.getButtons() == 0b00000001 || ioMod.getButtons() == 0b00000010) {
+    currentMode = BASIC_ADDR_INPUT;
+    ioMod.setLED(TM1638_COLOR_RED, 0);
+    ioMod.setLED(TM1638_COLOR_RED, 1);
+    ioMod.setLED(TM1638_COLOR_RED, 2);
+    ioMod.setLED(TM1638_COLOR_RED, 3);
+    ioMod.setLED(TM1638_COLOR_NONE, 4);
+    ioMod.setLED(TM1638_COLOR_NONE, 5);
+    ioMod.setLED(TM1638_COLOR_NONE, 6);
+    ioMod.setLED(TM1638_COLOR_NONE, 7);
+  }
+  
+  if (Serial.available()) {
+    String serialResponse = Serial.readStringUntil('\r\n');
+    char *remaining = serialResponse.c_str();
+    char *currentToken;
+    
+    byte paramsLength = 0;
+    byte currentCommand = 0;
+    unsigned int params[2] = {0};
+    
+    while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
+      String strCurrentToken(currentToken);
+      String strRemaining(remaining);
+      if (paramsLength > 1) {
+        break;
+      }
+      if (currentCommand > 0) {
+        if (strCurrentToken.indexOf("0x") > -1) {
+          params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFF;
+        } else {
+          params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFF;
+        }
+        paramsLength++;
+        if (strRemaining.length() == 0) {
+          parseSerialCommands(currentCommand, params, paramsLength);
+        }
+      } else {
+        if (strcmp(currentToken, "nop") == 0 || strcmp(currentToken, "0x00") == 0) {
+          currentCommand = 0x00;
+        } else if (strcmp(currentToken, "jmp") == 0 || strcmp(currentToken, "0x01") == 0) {
+          currentCommand = 0x01;
+        } else if (strcmp(currentToken, "get") == 0 || strcmp(currentToken, "0x02") == 0) {
+          currentCommand = 0x02;
+          if (strRemaining.length() == 0) {
+            parseSerialCommands(currentCommand, params, paramsLength);
+            break;
+          }
+        } else if (strcmp(currentToken, "mov") == 0 || strcmp(currentToken, "0x03") == 0) {
+          currentCommand = 0x03;
+        } else if (strcmp(currentToken, "l2m") == 0 || strcmp(currentToken, "0x04") == 0) {
+          currentCommand = 0x04;
+          if (strRemaining.length() == 0) {
+            parseSerialCommands(currentCommand, params, paramsLength);
+            break;
+          }
+        } else if (strcmp(currentToken, "ret") == 0 || strcmp(currentToken, "0x05") == 0) {
+          currentCommand = 0x05;
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else if (strcmp(currentToken, "rst") == 0 || strcmp(currentToken, "0x06") == 0) {
+          currentCommand = 0x06;
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else {
+          Serial.print("err 1; Unknown OP: ");
+          Serial.println(currentToken); 
+        }
+      }
+    }
+  }
+  
+  if (editingNumericDigitlightState == TM1638_COLOR_RED) {
+    editingNumericDigitlightState = TM1638_COLOR_NONE;
+  } else {
+    editingNumericDigitlightState = TM1638_COLOR_RED;
+  }
+  ioMod.setLED(editingNumericDigitlightState, 0);
+  ioMod.setLED(editingNumericDigitlightState, 1);
+  ioMod.setLED(editingNumericDigitlightState, 2);
+  ioMod.setLED(editingNumericDigitlightState, 3);
+  ioMod.setLED(editingNumericDigitlightState, 4);
+  ioMod.setLED(editingNumericDigitlightState, 5);
+  ioMod.setLED(editingNumericDigitlightState, 6);
+  ioMod.setLED(editingNumericDigitlightState, 7);
+
+  
+}
+
 void loop() {
   if (editingNumericDigitLight > -1) {
     if (editingNumericDigitlightState == TM1638_COLOR_RED) {
@@ -764,18 +1012,6 @@ void loop() {
       editingNumericDigitlightState = TM1638_COLOR_RED;
     }
     ioMod.setLED(editingNumericDigitlightState, editingNumericDigitLight);
-  }
-
-  if (currentMode == BASIC_MEM_INPUT) {
-    if (editingNumericDigitlightState == TM1638_COLOR_RED) {
-      editingNumericDigitlightState = TM1638_COLOR_NONE;
-    } else {
-      editingNumericDigitlightState = TM1638_COLOR_RED;
-    }
-    ioMod.setLED(editingNumericDigitlightState, 4);
-    ioMod.setLED(editingNumericDigitlightState, 5);
-    ioMod.setLED(editingNumericDigitlightState, 6);
-    ioMod.setLED(editingNumericDigitlightState, 7);
   }
 
   delay(REFRESH_SPEED);
@@ -804,9 +1040,13 @@ void loop() {
       numericMemoryInput();
     }
     break;
+    case SERIAL_COMMAND: {
+      serialCommandInput();
+    }
+    break;
     
     default: {
-      currentMode = BASIC_ADDR_INPUT;
+      currentMode = DEFAULT_RUN_MODE;
     }
   }
 
@@ -816,7 +1056,7 @@ void loop() {
     Reset();
   }
 
-  if (SERIAL_OUTPUT) {
+  if (serialDebugOutput && currentMode != SERIAL_COMMAND) {
     Serial.print("\n \nScreen Data: ");
     Serial.print(currentScreenValue[0], HEX);
     Serial.print(currentScreenValue[1], HEX);
