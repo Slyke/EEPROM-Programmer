@@ -813,6 +813,24 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
     }
     break;
     case 0x02: {
+      if (serialEchoCommand) {
+        Serial.println("aic");
+      }
+      setNewAddress(currentAddress + 1);
+      sprintf(outputBuf, "0x%04x", currentAddress);
+      Serial.println(outputBuf);
+    }
+    break;
+    case 0x03: {
+      if (serialEchoCommand) {
+        Serial.println("adc");
+      }
+      setNewAddress(currentAddress - 1);
+      sprintf(outputBuf, "0x%04x", currentAddress);
+      Serial.println(outputBuf);
+    }
+    break;
+    case 0x04: {
       if (paramsLength == 0) {
         if (serialEchoCommand) {
           Serial.println("get");
@@ -835,7 +853,7 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
       }
     }
     break;
-    case 0x03: {
+    case 0x05: {
       if (serialEchoCommand) {
         Serial.print("mov ");
         sprintf(outputBuf, "0x%04x", params[0]);
@@ -857,7 +875,7 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
       }
     }
     break;
-    case 0x04: {
+    case 0x06: {
       if (serialEchoCommand) {
         Serial.print("l2m ");
         sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
@@ -876,7 +894,7 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
       }
     }
     break;
-    case 0x05: {
+    case 0xf0: {
       if (paramsLength == 0) {
         if (serialEchoCommand) {
           Serial.println("ret");
@@ -891,7 +909,6 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         ioMod.setLED(TM1638_COLOR_RED, 2);
         ioMod.setLED(TM1638_COLOR_RED, 3);
       } else {
-        
         if (serialEchoCommand) {
           Serial.print("ret ");
           sprintf(outputBuf, "0x%02x", params[0]);
@@ -905,7 +922,7 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
       }
     }
     break;
-    case 0x06: {
+    case 0xf9: {
       if (serialEchoCommand) {
         Serial.println("rst");
       }
@@ -964,27 +981,35 @@ void serialCommandInput() {
       } else {
         if (strcmp(currentToken, "nop") == 0 || strcmp(currentToken, "0x00") == 0) {
           currentCommand = 0x00;
+          parseSerialCommands(currentCommand, params, paramsLength);
         } else if (strcmp(currentToken, "jmp") == 0 || strcmp(currentToken, "0x01") == 0) {
           currentCommand = 0x01;
-        } else if (strcmp(currentToken, "get") == 0 || strcmp(currentToken, "0x02") == 0) {
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else if (strcmp(currentToken, "ain") == 0 || strcmp(currentToken, "0x02") == 0 || strcmp(currentToken, "inc") == 0) {
           currentCommand = 0x02;
-          if (strRemaining.length() == 0) {
-            parseSerialCommands(currentCommand, params, paramsLength);
-            break;
-          }
-        } else if (strcmp(currentToken, "mov") == 0 || strcmp(currentToken, "0x03") == 0) {
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else if (strcmp(currentToken, "adc") == 0 || strcmp(currentToken, "0x03") == 0 || strcmp(currentToken, "dec") == 0) {
           currentCommand = 0x03;
-        } else if (strcmp(currentToken, "l2m") == 0 || strcmp(currentToken, "0x04") == 0) {
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else if (strcmp(currentToken, "get") == 0 || strcmp(currentToken, "0x04") == 0) {
           currentCommand = 0x04;
           if (strRemaining.length() == 0) {
             parseSerialCommands(currentCommand, params, paramsLength);
             break;
           }
-        } else if (strcmp(currentToken, "ret") == 0 || strcmp(currentToken, "0x05") == 0) {
+        } else if (strcmp(currentToken, "mov") == 0 || strcmp(currentToken, "0x05") == 0) {
           currentCommand = 0x05;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "rst") == 0 || strcmp(currentToken, "0x06") == 0) {
+        } else if (strcmp(currentToken, "l2m") == 0 || strcmp(currentToken, "0x06") == 0) {
           currentCommand = 0x06;
+          if (strRemaining.length() == 0) {
+            parseSerialCommands(currentCommand, params, paramsLength);
+            break;
+          }
+        } else if (strcmp(currentToken, "ret") == 0 || strcmp(currentToken, "0xF0") == 0 || strcmp(currentToken, "0xf0") == 0) {
+          currentCommand = 0xf0;
+          parseSerialCommands(currentCommand, params, paramsLength);
+        } else if (strcmp(currentToken, "rst") == 0 || strcmp(currentToken, "0xF9") == 0 || strcmp(currentToken, "0xf9") == 0) {
+          currentCommand = 0xf9;
           parseSerialCommands(currentCommand, params, paramsLength);
         } else {
           char outputBuf[32];
