@@ -348,6 +348,15 @@ void readAndDisplayMemory() {
   }
 }
 
+void readAndDisplayAddress() {
+  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
+  updateScreen(addrBuffer, false);
+  
+  if (addrBuffer) {
+    free(addrBuffer);
+  }
+}
+
 void setupKeypadMatrixPins() {
   for(byte i = 0; i < pinRows; i++) {
     pinMode(outputPins[i],OUTPUT);
@@ -906,19 +915,8 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
     }
     break;
   }
-
-  memRead = exEepromReadByte(EEPROM_ADDR, currentAddress, EEPROM_READ_FAILURE);
-  unsigned char *memBuffer = breakIntToArray((byte)memRead, modeHex);
-  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
-  updateScreen(addrBuffer, false);
-  updateScreen(memBuffer, true);
-  
-  if (addrBuffer) {
-    free(addrBuffer);
-  }
-  if (memBuffer) {
-    free(memBuffer);
-  }
+  readAndDisplayAddress();
+  readAndDisplayMemory();
 }
 
 void serialCommandInput() {
@@ -1047,6 +1045,7 @@ void loop() {
     break;
     case NUMERIC_ADDR_INPUT: {
       numericAddressInputMode();
+      readAndDisplayMemory();
     }
     break;
     case BASIC_MEM_CTRL: {
@@ -1063,6 +1062,7 @@ void loop() {
     break;
     case SERIAL_COMMAND: {
       serialCommandInput();
+      readAndDisplayMemory();
     }
     break;
     
@@ -1086,7 +1086,10 @@ void loop() {
       updateScreen(displayOn, true);
       serialEchoCommand = true;
     }
+    ioMod.setDisplay(currentScreenValue);
     delay(1000);
+    readAndDisplayAddress();
+    readAndDisplayMemory();
   }
 
   if (serialDebugOutput && currentMode != SERIAL_COMMAND) {
