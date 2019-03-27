@@ -25,6 +25,32 @@
 #define COMM_SPEED 19200
 #define REFRESH_SPEED 150
 
+// OP Codes
+#define OP_NOP 0x00
+#define OP_JMP 0x01
+#define OP_AIC 0x02
+#define OP_ADC 0x03
+#define OP_GETC 0x04
+#define OP_GET 0x05
+#define OP_MOV 0x06
+#define OP_L2M 0x07
+#define OP_INT 0xe0
+#define OP_RETD 0xf0
+#define OP_RET 0xf1
+#define OP_RST 0xf9
+#define STR_OP_NOP "0x00"
+#define STR_OP_JMP "0x01"
+#define STR_OP_AIC "0x02"
+#define STR_OP_ADC "0x03"
+#define STR_OP_GETC "0x04"
+#define STR_OP_GET "0x05"
+#define STR_OP_MOV "0x06"
+#define STR_OP_L2M "0x07"
+#define STR_OP_INT "0xe0"
+#define STR_OP_RETD "0xf0"
+#define STR_OP_RET "0xf1"
+#define STR_OP_RST "0xf9"
+
 const byte pinRows = 4;
 const byte pinCols = 4;
 const byte outputPins[pinRows] = {13, 12, 11, 10};
@@ -123,6 +149,7 @@ byte memRead = EEPROM_READ_FAILURE;
 bool memoryReadfailure = true;
 unsigned int tempMemoryEdit = 0;
 bool serialEchoCommand = false;
+bool assemblyInterpretMode = true;
 bool serialDebugOutput = false;
 
 unsigned char currentMode = 0;
@@ -793,18 +820,18 @@ void basicMemoryControl() {
 void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) {
   char outputBuf[32];
   switch(command) {
-    case 0x00: {
-      Serial.println("nop");
+    case OP_NOP: {
+      Serial.println(F("nop"));
     }
     break;
-    case 0x01: {
+    case OP_JMP: {
       if (serialEchoCommand) {
-        Serial.print("jmp");
+        Serial.print(F("jmp"));
         sprintf(outputBuf, " 0x%04x", params[0]);
         Serial.println(outputBuf);
       }
       if (paramsLength < 1) {
-        Serial.println("err 2; jmp needs 1 param");
+        Serial.println(F("err 2; jmp ("STR_OP_JMP") takes 1 param"));
         break;
       }
       setNewAddress(params[0]);
@@ -812,37 +839,41 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
       Serial.println(outputBuf);
     }
     break;
-    case 0x02: {
+    case OP_AIC: {
       if (serialEchoCommand) {
-        Serial.println("aic");
+        Serial.println(F("aic"));
       }
       setNewAddress(currentAddress + 1);
       sprintf(outputBuf, "0x%04x", currentAddress);
       Serial.println(outputBuf);
     }
     break;
-    case 0x03: {
+    case OP_ADC: {
       if (serialEchoCommand) {
-        Serial.println("adc");
+        Serial.println(F("adc"));
       }
       setNewAddress(currentAddress - 1);
       sprintf(outputBuf, "0x%04x", currentAddress);
       Serial.println(outputBuf);
     }
     break;
-    case 0x04: {
+    case OP_GETC: {
       if (paramsLength == 0) {
         if (serialEchoCommand) {
-          Serial.println("get");
+          Serial.println(F("get"));
         }
         sprintf(outputBuf, "0x%04x", currentAddress);
         Serial.print(outputBuf);
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
-      } else {
+      }
+    }
+    break;
+    case OP_GET: {
+      if (paramsLength == 1) {
         if (serialEchoCommand) {
-          Serial.print("get ");
-          sprintf(outputBuf, "0x%02x", params[0]);
+          Serial.print(F("get "));
+          sprintf(outputBuf, "0x%04x", params[0]);
           Serial.println(outputBuf);
         }
         memRead = exEepromReadByte(EEPROM_ADDR, params[0], EEPROM_READ_FAILURE);
@@ -850,12 +881,15 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         Serial.print(outputBuf);
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
+      } else {
+        Serial.println(F("err 3; get ("STR_OP_GET") takes 1 param"));
+        break;
       }
     }
     break;
-    case 0x05: {
+    case OP_MOV: {
       if (serialEchoCommand) {
-        Serial.print("mov ");
+        Serial.print(F("mov "));
         sprintf(outputBuf, "0x%04x", params[0]);
         Serial.print(outputBuf);
         sprintf(outputBuf, " 0x%02x", params[1] & 0xFF);
@@ -870,12 +904,12 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
       } else {
-        Serial.println("err 4; mov needs 2 params");
+        Serial.println("err 4; mov ("STR_OP_MOV") takes 2 params");
         break;
       }
     }
     break;
-    case 0x06: {
+    case OP_L2M: {
       if (serialEchoCommand) {
         Serial.print("l2m ");
         sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
@@ -889,26 +923,45 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
       } else {
-        Serial.println("err 8; l2m needs 1 params");
+        Serial.println("err 8; "STR_OP_L2M" takes 1 params");
         break;
       }
     }
     break;
-    case 0xf0: {
-      if (paramsLength == 0) {
-        if (serialEchoCommand) {
-          Serial.println("ret");
-        }
-        Serial.print("ret ");
-        sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
+    case OP_INT: {
+      if (serialEchoCommand) {
+        Serial.print("int ");
+        sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
+        Serial.println(outputBuf);
+      }
+      if (paramsLength == 1) {
+        sprintf(outputBuf, "0x%02x", params[0]);
         Serial.println(outputBuf);
         delay(10);
-        currentMode = DEFAULT_RUN_MODE;
-        ioMod.setLED(TM1638_COLOR_RED, 0);
-        ioMod.setLED(TM1638_COLOR_RED, 1);
-        ioMod.setLED(TM1638_COLOR_RED, 2);
-        ioMod.setLED(TM1638_COLOR_RED, 3);
+        assemblyInterpretMode = params[0] == 0 ? false : true;
       } else {
+        Serial.println("err 16; "STR_OP_INT" takes 1 params");
+        break;
+      }
+    }
+    break;
+    case OP_RETD: {
+      if (serialEchoCommand) {
+        Serial.println("ret");
+      }
+      Serial.print("ret ");
+      sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
+      Serial.println(outputBuf);
+      delay(10);
+      currentMode = DEFAULT_RUN_MODE;
+      ioMod.setLED(TM1638_COLOR_RED, 0);
+      ioMod.setLED(TM1638_COLOR_RED, 1);
+      ioMod.setLED(TM1638_COLOR_RED, 2);
+      ioMod.setLED(TM1638_COLOR_RED, 3);
+    }
+    break;
+    case OP_RET: {
+      if (paramsLength == 1) {
         if (serialEchoCommand) {
           Serial.print("ret ");
           sprintf(outputBuf, "0x%02x", params[0]);
@@ -919,10 +972,13 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         Serial.println(outputBuf);
         delay(10);
         currentMode = params[0];
+      } else {
+        Serial.println("err 32; ret ("STR_OP_RET") takes 1 params");
+        break;
       }
     }
     break;
-    case 0xf9: {
+    case OP_RST: {
       if (serialEchoCommand) {
         Serial.println("rst");
       }
@@ -934,6 +990,109 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
   }
   readAndDisplayAddress();
   readAndDisplayMemory();
+}
+
+void commandDecode(byte ret[], char currentToken[], byte paramsLength, unsigned int params[], char remaining[]) {
+  String strRemaining(remaining);
+  ret[0] = OP_NOP;
+  ret[1] = 0;
+
+  if (strcmp(currentToken, STR_OP_NOP) == 0) {
+    ret[0] = OP_NOP;
+  } else if (strcmp(currentToken, STR_OP_JMP) == 0) {
+    ret[0] = OP_JMP;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_AIC) == 0) {
+    ret[0] = OP_AIC;
+  } else if (strcmp(currentToken, STR_OP_ADC) == 0) {
+    ret[0] = OP_ADC;
+  } else if (strcmp(currentToken, STR_OP_GETC) == 0) {
+    ret[0] = OP_GETC;
+  } else if (strcmp(currentToken, STR_OP_GET) == 0) {
+    ret[0] = OP_GET;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_MOV) == 0) {
+    ret[0] = OP_MOV;
+    ret[1] = 2;
+  } else if (strcmp(currentToken, STR_OP_L2M) == 0) {
+    ret[0] = OP_L2M;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_INT) == 0) {
+    ret[0] = OP_INT;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_RETD) == 0) {
+    ret[0] = OP_RETD;
+  } else if (strcmp(currentToken, STR_OP_RET) == 0) {
+    ret[0] = OP_RET;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_RST) == 0) {
+    ret[0] = OP_RST;
+  } else if (strcmp(currentToken, "nop") == 0) {
+    ret[0] = OP_NOP;
+  } else if (strcmp(currentToken, "jmp") == 0) {
+    ret[0] = OP_JMP;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, "aic") == 0 || strcmp(currentToken, "inc") == 0) {
+    ret[0] = OP_AIC;
+  } else if (strcmp(currentToken, "adc") == 0 || strcmp(currentToken, "dec") == 0) {
+    ret[0] = OP_ADC;
+  } else if (strcmp(currentToken, "get") == 0) {
+    ret[0] = OP_GET;
+    ret[1] = 1;
+    if (strRemaining.length() == 0) {
+      ret[0] = OP_GETC;
+      ret[1] = 0;
+    }
+  } else if (strcmp(currentToken, "mov") == 0) {
+    ret[0] = OP_MOV;
+    ret[1] = 2;
+  } else if (strcmp(currentToken, "l2m") == 0) {
+    ret[0] = OP_L2M;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, "int") == 0) {
+    ret[0] = OP_INT;
+    ret[1] = 1;
+  } else if (strcmp(currentToken, "ret") == 0) {
+    ret[0] = OP_RET;
+    ret[1] = 1;
+    if (strRemaining.length() == 0) {
+      ret[0] = OP_RETD;
+      ret[1] = 0;
+    }
+  } else if (strcmp(currentToken, "rst") == 0) {
+    ret[0] = OP_RST;
+  } else {
+    char outputBuf[32];
+    String strCurrentToken(currentToken);
+    Serial.print(F("err 1; Unknown OP."));
+    Serial.print(F(" Len: ["));
+    sprintf(outputBuf, "0x%02x", strCurrentToken.length());
+    Serial.print(outputBuf);
+    Serial.print(F("]. Chars: ["));
+    for (byte i = 0; i < strCurrentToken.length() - 1; i++) {
+      sprintf(outputBuf, "0x%02x", (byte)currentToken[i]);
+      Serial.print(outputBuf);
+      Serial.print(", ");
+    }
+    sprintf(outputBuf, "0x%02x", (byte)currentToken[strCurrentToken.length() - 1]);
+    Serial.print(outputBuf);
+    Serial.print("]: ");
+    Serial.println(currentToken);
+  }
+}
+
+void commandParamParse(char currentToken[], unsigned int params[], byte &paramsLength) {
+  String strCurrentToken(currentToken);
+  if (paramsLength < 2) { // Ignore extras
+    if (strCurrentToken.indexOf(F("0x")) > -1) {
+      params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFFFF;
+    } else if (strCurrentToken.indexOf("0b") > -1) {
+      params[paramsLength] = (int)strtol(currentToken, 0, 2) % 0xFFFF;
+    } else {
+      params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFFFF;
+    }
+    paramsLength++;
+  }
 }
 
 void serialCommandInput() {
@@ -953,81 +1112,70 @@ void serialCommandInput() {
     ioMod.setLED(TM1638_COLOR_NONE, 6);
     ioMod.setLED(TM1638_COLOR_NONE, 7);
   }
-  
+
   if (Serial.available()) {
     String serialResponse = Serial.readStringUntil('\r\n');
-    char *remaining = serialResponse.c_str();
+    char *commSeg = serialResponse.c_str();
+    char *remaining;
     char *currentToken;
     
     byte paramsLength = 0;
-    byte currentCommand = 0;
+    byte commandDecodeRet[2] = {0};
     unsigned int params[2] = {0};
-    
-    while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
-      String strCurrentToken(currentToken);
-      String strRemaining(remaining);
-      if (currentCommand > 0) {
-        if (paramsLength < 2) { // Ignore extra
-          if (strCurrentToken.indexOf("0x") > -1) {
-            params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFFFF;
+
+    if (assemblyInterpretMode) {
+      while ((remaining = strtok_r(commSeg, ";", &commSeg)) != NULL) {
+        commandDecodeRet[0] = 0;
+        commandDecodeRet[1] = 0;
+        paramsLength = 0;
+        params[0] = 0;
+        params[1] = 0;
+        while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
+          String strRemaining(remaining);
+          if (commandDecodeRet[0] > 0) {
+            // Command parameter parser
+            commandParamParse(currentToken, params, paramsLength);
+            if (strRemaining.length() == 0) {
+              parseSerialCommands(commandDecodeRet[0], params, paramsLength);
+            }
           } else {
-            params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFFFF;
+            // Command decoder
+            commandDecode(commandDecodeRet, currentToken, paramsLength, params, remaining);
+  
+            if (strRemaining.length() == 0) {
+              parseSerialCommands(commandDecodeRet[0], params, paramsLength);
+            }
           }
-          paramsLength++;
         }
-        if (strRemaining.length() == 0) {
-          parseSerialCommands(currentCommand, params, paramsLength);
-        }
-      } else {
-        if (strcmp(currentToken, "nop") == 0 || strcmp(currentToken, "0x00") == 0) {
-          currentCommand = 0x00;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "jmp") == 0 || strcmp(currentToken, "0x01") == 0) {
-          currentCommand = 0x01;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "ain") == 0 || strcmp(currentToken, "0x02") == 0 || strcmp(currentToken, "inc") == 0) {
-          currentCommand = 0x02;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "adc") == 0 || strcmp(currentToken, "0x03") == 0 || strcmp(currentToken, "dec") == 0) {
-          currentCommand = 0x03;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "get") == 0 || strcmp(currentToken, "0x04") == 0) {
-          currentCommand = 0x04;
+      }
+    } else {
+      remaining = commSeg;
+      while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
+        String strRemaining(remaining);
+        if (commandDecodeRet[0] > 0) {
+          // Command parameter parser
+          commandParamParse(currentToken, params, paramsLength);
+ 
           if (strRemaining.length() == 0) {
-            parseSerialCommands(currentCommand, params, paramsLength);
-            break;
+            parseSerialCommands(commandDecodeRet[0], params, paramsLength);
+            commandDecodeRet[0] = 0;
+            commandDecodeRet[1] = 0;
+            paramsLength = 0;
+            params[0] = 0;
+            params[1] = 0;
           }
-        } else if (strcmp(currentToken, "mov") == 0 || strcmp(currentToken, "0x05") == 0) {
-          currentCommand = 0x05;
-        } else if (strcmp(currentToken, "l2m") == 0 || strcmp(currentToken, "0x06") == 0) {
-          currentCommand = 0x06;
-          if (strRemaining.length() == 0) {
-            parseSerialCommands(currentCommand, params, paramsLength);
-            break;
-          }
-        } else if (strcmp(currentToken, "ret") == 0 || strcmp(currentToken, "0xF0") == 0 || strcmp(currentToken, "0xf0") == 0) {
-          currentCommand = 0xf0;
-          parseSerialCommands(currentCommand, params, paramsLength);
-        } else if (strcmp(currentToken, "rst") == 0 || strcmp(currentToken, "0xF9") == 0 || strcmp(currentToken, "0xf9") == 0) {
-          currentCommand = 0xf9;
-          parseSerialCommands(currentCommand, params, paramsLength);
         } else {
-          char outputBuf[32];
-          Serial.print("err 1; Unknown OP.");
-          Serial.print(" Len: [");
-          sprintf(outputBuf, "0x%02x", strCurrentToken.length());
-          Serial.print(outputBuf);
-          Serial.print("]. Chars: [");
-          for (byte i = 0; i < strCurrentToken.length() - 1; i++) {
-            sprintf(outputBuf, "0x%02x", (byte)currentToken[i]);
-            Serial.print(outputBuf);
-            Serial.print(", ");
+          // Command decoder
+          commandDecode(commandDecodeRet, currentToken, paramsLength, params, remaining);
+
+          if (commandDecodeRet[1] == 0) {
+            parseSerialCommands(commandDecodeRet[0], params, paramsLength);
+            commandDecodeRet[0] = 0;
+            commandDecodeRet[1] = 0;
+            paramsLength = 0;
+            params[0] = 0;
+            params[1] = 0;
           }
-          sprintf(outputBuf, "0x%02x", (byte)currentToken[strCurrentToken.length() - 1]);
-          Serial.print(outputBuf);
-          Serial.print("]: ");
-          Serial.println(currentToken);
-          break;
         }
       }
     }
