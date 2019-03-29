@@ -35,6 +35,7 @@
 #define OP_MOV 0x06
 #define OP_L2M 0x07
 #define OP_INT 0xe0
+#define OP_ECH 0xe1
 #define OP_RETD 0xf0
 #define OP_RET 0xf1
 #define OP_RST 0xf9
@@ -47,6 +48,7 @@
 #define STR_OP_MOV "0x06"
 #define STR_OP_L2M "0x07"
 #define STR_OP_INT "0xe0"
+#define STR_OP_ECH "0xe1"
 #define STR_OP_RETD "0xf0"
 #define STR_OP_RET "0xf1"
 #define STR_OP_RST "0xf9"
@@ -200,9 +202,9 @@ byte getDigit(unsigned int inputNumber, byte loc, byte radix) {
 
   byte numBuff[7] = {0};
   if (radix == 0x10) {
-    sprintf (numBuff, "%4X", inputNumber);
+    sprintf(numBuff, "%4X", inputNumber);
   } else {
-    sprintf (numBuff, "%4d", inputNumber);
+    sprintf(numBuff, "%4d", inputNumber);
   }
 
   if (radix == 0x10) {
@@ -904,15 +906,15 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
       } else {
-        Serial.println("err 4; mov ("STR_OP_MOV") takes 2 params");
+        Serial.println(F("err 4; mov ("STR_OP_MOV") takes 2 params"));
         break;
       }
     }
     break;
     case OP_L2M: {
       if (serialEchoCommand) {
-        Serial.print("l2m ");
-        sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
+        Serial.print(F("l2m "));
+        sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
         Serial.println(outputBuf);
       }
       if (paramsLength == 1) {
@@ -923,33 +925,54 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
         sprintf(outputBuf, " 0x%02x", memRead);
         Serial.println(outputBuf);
       } else {
-        Serial.println("err 8; "STR_OP_L2M" takes 1 params");
+        Serial.println(F("err 8; "STR_OP_L2M" takes 1 params"));
         break;
       }
     }
     break;
     case OP_INT: {
       if (serialEchoCommand) {
-        Serial.print("int ");
-        sprintf(outputBuf, " 0x%02x", params[0] & 0xFF);
+        Serial.print(F("int "));
+        sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
         Serial.println(outputBuf);
       }
       if (paramsLength == 1) {
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.println(outputBuf);
-        delay(10);
         assemblyInterpretMode = params[0] == 0 ? false : true;
+        sprintf(outputBuf, "0x%02x", params[0]);
+        Serial.print(outputBuf);
+        Serial.print("; ");
+        Serial.println(assemblyInterpretMode ? F("true") : F("false"));
+        delay(10);
       } else {
-        Serial.println("err 16; "STR_OP_INT" takes 1 params");
+        Serial.println(F("err 16; "STR_OP_INT" takes 1 params"));
+        break;
+      }
+    }
+    break;
+    case OP_ECH: {
+      if (serialEchoCommand) {
+        Serial.print(F("ech "));
+        sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
+        Serial.println(outputBuf);
+      }
+      if (paramsLength == 1) {
+        serialEchoCommand = params[0] == 0 ? false : true;
+        sprintf(outputBuf, "0x%02x", params[0]);
+        Serial.print(outputBuf);
+        Serial.print(F("; "));
+        Serial.println(serialEchoCommand ? F("true") : F("false"));
+        delay(10);
+      } else {
+        Serial.println(F("err 32; "STR_OP_ECH" takes 1 params"));
         break;
       }
     }
     break;
     case OP_RETD: {
       if (serialEchoCommand) {
-        Serial.println("ret");
+        Serial.println(F("ret"));
       }
-      Serial.print("ret ");
+      Serial.print(F("ret "));
       sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
       Serial.println(outputBuf);
       delay(10);
@@ -963,26 +986,26 @@ void parseSerialCommands(byte command, unsigned int *params, byte paramsLength) 
     case OP_RET: {
       if (paramsLength == 1) {
         if (serialEchoCommand) {
-          Serial.print("ret ");
+          Serial.print(F("ret "));
           sprintf(outputBuf, "0x%02x", params[0]);
           Serial.println(outputBuf);
         }
-        Serial.print("ret ");
+        Serial.print(F("ret "));
         sprintf(outputBuf, "0x%02x", params[0]);
         Serial.println(outputBuf);
         delay(10);
         currentMode = params[0];
       } else {
-        Serial.println("err 32; ret ("STR_OP_RET") takes 1 params");
+        Serial.println(F("err 64; ret ("STR_OP_RET") takes 1 params"));
         break;
       }
     }
     break;
     case OP_RST: {
       if (serialEchoCommand) {
-        Serial.println("rst");
+        Serial.println(F("rst"));
       }
-      Serial.println("RESET");
+      Serial.println(F("RESET"));
       delay(10);
       Reset();
     }
@@ -1020,6 +1043,9 @@ void commandDecode(byte ret[], char currentToken[], byte paramsLength, unsigned 
   } else if (strcmp(currentToken, STR_OP_INT) == 0) {
     ret[0] = OP_INT;
     ret[1] = 1;
+  } else if (strcmp(currentToken, STR_OP_ECH) == 0) {
+    ret[0] = OP_ECH;
+    ret[1] = 1;
   } else if (strcmp(currentToken, STR_OP_RETD) == 0) {
     ret[0] = OP_RETD;
   } else if (strcmp(currentToken, STR_OP_RET) == 0) {
@@ -1052,6 +1078,9 @@ void commandDecode(byte ret[], char currentToken[], byte paramsLength, unsigned 
   } else if (strcmp(currentToken, "int") == 0) {
     ret[0] = OP_INT;
     ret[1] = 1;
+  } else if (strcmp(currentToken, "ech") == 0) {
+    ret[0] = OP_ECH;
+    ret[1] = 1;
   } else if (strcmp(currentToken, "ret") == 0) {
     ret[0] = OP_RET;
     ret[1] = 1;
@@ -1069,7 +1098,7 @@ void commandDecode(byte ret[], char currentToken[], byte paramsLength, unsigned 
     sprintf(outputBuf, "0x%02x", strCurrentToken.length());
     Serial.print(outputBuf);
     Serial.print(F("]. Chars: ["));
-    for (byte i = 0; i < strCurrentToken.length() - 1; i++) {
+    for (byte i = 0; i < strCurrentToken.length() - 1  && i < 0xFFFF; i++) {
       sprintf(outputBuf, "0x%02x", (byte)currentToken[i]);
       Serial.print(outputBuf);
       Serial.print(", ");
@@ -1086,7 +1115,7 @@ void commandParamParse(char currentToken[], unsigned int params[], byte &paramsL
   if (paramsLength < 2) { // Ignore extras
     if (strCurrentToken.indexOf(F("0x")) > -1) {
       params[paramsLength] = (int)strtol(currentToken, 0, 16) % 0xFFFF;
-    } else if (strCurrentToken.indexOf("0b") > -1) {
+    } else if (strCurrentToken.indexOf(F("0b")) > -1) {
       params[paramsLength] = (int)strtol(currentToken, 0, 2) % 0xFFFF;
     } else {
       params[paramsLength] = (int)strtol(currentToken, 0, 10) % 0xFFFF;
@@ -1151,12 +1180,13 @@ void serialCommandInput() {
     } else {
       remaining = commSeg;
       while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
+
         String strRemaining(remaining);
         if (commandDecodeRet[0] > 0) {
           // Command parameter parser
           commandParamParse(currentToken, params, paramsLength);
  
-          if (strRemaining.length() == 0) {
+          if (paramsLength >= commandDecodeRet[1]) {
             parseSerialCommands(commandDecodeRet[0], params, paramsLength);
             commandDecodeRet[0] = 0;
             commandDecodeRet[1] = 0;
@@ -1276,14 +1306,14 @@ void loop() {
     Serial.print(currentScreenValue[6], HEX);
     Serial.print(currentScreenValue[7], HEX);
     Serial.print(currentScreenValue[8], HEX);
-    Serial.print("\nCurrent Address: ");
+    Serial.print(F("\nCurrent Address: "));
     Serial.print(currentAddress, HEX);
-    Serial.print("\nCurrent Memory: ");
+    Serial.print(F("\nCurrent Memory: "));
     Serial.print(memRead, HEX);
-    Serial.print("\nCurrent Mode: ");
+    Serial.print(F("\nCurrent Mode: "));
     Serial.print(currentMode, HEX);
     if (lastKeyPress != NO_KEY) {
-      Serial.print("\nLast Keypin Pressed: ");
+      Serial.print(F("\nLast Keypin Pressed: "));
       Serial.println(lastKeyPress, HEX);
     }
     Serial.println(" ");
