@@ -2,13 +2,14 @@ let opCommand = "0x06";
 let processArgs = process.argv;
 let charComment = false;
 let stringTerminatorChar = true;
-let assemlyLineLength = 20; // Newlines every X commands, to avoid serial overlfow.
+let assemlyLineLength = 2; // Newlines every X commands, to avoid serial overlfow.
 let assemblyOutput = false;
 let argCount = 0;
 let padding = 2;
 
 let assemblyOut = "";
 let commandCounter = 0;
+let terminatorLoc = 0;
 
 for (let i = 2; i < processArgs.length; i++) {
   if (processArgs[i] === "-op") {
@@ -28,6 +29,12 @@ for (let i = 2; i < processArgs.length; i++) {
   } else if (processArgs[i] === "-p") {
     if (processArgs[i + 1] !== undefined) {
       padding = parseInt(processArgs[i + 1]);
+    }
+    
+    argCount += 2;
+  } else if (processArgs[i] === "-asml") {
+    if (processArgs[i + 1] !== undefined) {
+      assemlyLineLength = parseInt(processArgs[i + 1]);
     }
     
     argCount += 2;
@@ -68,11 +75,11 @@ function convertToHex(inputChar, charIndex) {
 }
 
 for (let i = argCount + 2; i < processArgs.length; i += 2) {
-  if (processArgs[i] === "-op") {
+  if (processArgs[i] === "-op" ||  processArgs[i] === "-asml" ||  processArgs[i] === "-p") {
     continue;
   }
 
-  if (processArgs[i] === "-c") {
+  if (processArgs[i] === "-c" || processArgs[i] === "-nt" || processArgs[i] === "-asm") {
     i--;
     continue;
   }
@@ -99,6 +106,13 @@ for (let i = argCount + 2; i < processArgs.length; i += 2) {
         commandCounter = 0;
         assemblyOut = "";
       }
+      terminatorLoc = startingAddress + j + 1;
+    }
+    if (assemblyOut === "") {
+      if (stringTerminatorChar) {
+        assemblyOut += `${opCommand} 0x${pad((terminatorLoc).toString(16), padding > -1 ? padding : 4)} ${convertToHex(0x00, terminatorLoc)}`
+      }
+      console.log(assemblyOut);
     }
   } else {
     for (let j = 0; j < processString.length; j++) {
@@ -112,6 +126,9 @@ for (let i = argCount + 2; i < processArgs.length; i += 2) {
 }
 
 if (commandCounter > 0 && assemblyOut.length > 3) {
+  if (stringTerminatorChar) {
+    assemblyOut += `${opCommand} 0x${pad((terminatorLoc).toString(16), padding > -1 ? padding : 4)} ${convertToHex(0x00, terminatorLoc)}`
+  }
   console.log(assemblyOut);
 }
 
