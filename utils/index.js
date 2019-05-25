@@ -119,7 +119,7 @@ for (let i = argCount + 2; i < processArgs.length; i += 2) {
       console.log(`${opCommand} 0x${pad((startingAddress + j).toString(16), padding > -1 ? padding : 4)} ${convertToHex(processString[j], j + 1)}`);
     }
     if (stringTerminatorChar) {
-      console.log(`${opCommand} 0x${pad((processString.length).toString(16), padding > -1 ? padding : 4)} ${convertToHex(0x00, processString.length)}`);
+      console.log(`${opCommand} 0x${pad((startingAddress + processString.length).toString(16), padding > -1 ? padding : 4)} ${convertToHex(0x00, processString.length)}`);
     }
     console.log("");
   }
