@@ -12,26 +12,6 @@ void ICACHE_FLASH_ATTR serialCommandInput() {
   }
 }
 
-//void ICACHE_FLASH_ATTR processCommandInputMnemonic(char* byteCodeArr, int byteCodeLength) {
-//  String strRemaining(remaining);
-//  
-//  if (commandDecodeRet[0] > 0) {
-//    // Command parameter parser
-//    commandParamParse(currentToken, 0, params, &paramsLength);
-//    if (strRemaining.length() == 0) {
-//      execInputCommands(commandDecodeRet[0], params, paramsLength);
-//    }
-//  } else {
-//    // Command decoder
-//    commandDecode(commandDecodeRet, currentToken, params, paramsLength, remaining, strlen(remaining));
-//
-//    if (strRemaining.length() == 0) {
-//      execInputCommands(commandDecodeRet[0], params, paramsLength);
-//    }
-//  }
-//}
-
-
 void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode) {
   char *remaining;
   char *currentToken;
@@ -47,9 +27,24 @@ void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode) {
       paramsLength = 0;
       params[0] = 0;
       params[1] = 0;
-      while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL) {
-        // processCommandInputMnemonic
+      char *commandOp = strtok_r(remaining, " ", &remaining);
+      commandDecode(commandDecodeRet, commandOp, remaining != NULL ? strlen(remaining) : 0, NULL);
+
+      while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL && paramsLength < OP_PROCESS_ARR_LIMIT && paramsLength < commandDecodeRet[1]) {
+        int res;
+        stringToNumber((int *)&res, currentToken);
+        params[paramsLength] = res;
+        paramsLength++;
       }
+
+      char byteArray[paramsLength + 1];
+      byteArray[0] = commandDecodeRet[0];
+
+      for (int i = 0; i < MAX_OP_PARAM_LENGTH && i < commandDecodeRet[1]; i++) {
+        byteArray[i + 1] = params[i];
+      }
+      
+      processCommandInputByteCode(byteArray, commandDecodeRet[1] + 1);
     }
   } else {
     remaining = commSeg;
@@ -73,6 +68,7 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
 
       if (paramsLength >= commandDecodeRet[1]) {
         execInputCommands(commandDecodeRet[0], params, paramsLength);
+        i += paramsLength;
         commandDecodeRet[0] = 0;
         commandDecodeRet[1] = 0;
         paramsLength = 0;
@@ -99,8 +95,6 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
 
 void ICACHE_FLASH_ATTR commandParamParse(char opByteArray[], int paramPos, unsigned int params[], byte paramsLength) {
   for (byte i = 0; i < paramsLength && i < MAX_OP_PARAM_LENGTH; i++) {
-//    int res;
-//    stringToNumber((int *)&res, opByteArray[i + paramPos]);
     params[i] = opByteArray[i + paramPos];
   }
 }
@@ -120,7 +114,7 @@ void ICACHE_FLASH_ATTR commandToOpAndParam(char currentToken, byte ret[]) {
   }
 }
 
-void ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], unsigned int params[], byte paramsLength, char remaining[], int remainingLength) {
+boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte remainingLength, char errorMessage[]) {
   ret[0] = OP_NOP;
   ret[1] = 0;
 
@@ -226,7 +220,7 @@ void ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], unsigned i
   } else if (strcmp(currentToken, "ret") == 0) {
     commandToOpAndParam(OP_RET, ret);
     if (remainingLength == 0) {
-    commandToOpAndParam(OP_RETD, ret);
+      commandToOpAndParam(OP_RETD, ret);
     }
   } else if (strcmp(currentToken, "rst") == 0) {
     commandToOpAndParam(OP_RST, ret);
@@ -247,7 +241,10 @@ void ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], unsigned i
     Serial.print(outputBuf);
     Serial.print("]: ");
     Serial.println(currentToken);
+    return false;
   }
+
+  return true;
 }
 
 void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength) {
