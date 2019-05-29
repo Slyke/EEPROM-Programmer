@@ -59,7 +59,7 @@
 void ICACHE_FLASH_ATTR processCommandInput(char* commSeg);
 void ICACHE_FLASH_ATTR serialCommandInput();
 void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode);
-void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength);
+void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, int* paramLength);
 void ICACHE_FLASH_ATTR commandParamParse(char opByteArray[], int paramPos, unsigned int params[], byte paramsLength);
 void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength);
 void ICACHE_FLASH_ATTR commandToOpAndParam(char currentToken, byte ret[]);
