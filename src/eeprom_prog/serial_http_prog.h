@@ -1,7 +1,6 @@
 #ifndef SERIAL_HTTP_PROG_H
 #define SERIAL_HTTP_PROG_H
 
-
 // OP Codes
 #define OP_NOP 0x00
 #define OP_JMP 0x01
@@ -56,13 +55,18 @@
 
 #define MAX_OP_PARAM_LENGTH 2
 
-void ICACHE_FLASH_ATTR processCommandInput(char* commSeg);
-void ICACHE_FLASH_ATTR serialCommandInput();
-void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode);
-void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, int* paramLength);
+void ICACHE_FLASH_ATTR processSerialInput(char resMessage[], char errorMessage[], char echoMessage[]);
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, char resMessage[], char errorMessage[], char echoMessage[]);
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assemblyMode, char resMessage[], char errorMessage[], char echoMessage[]);
+void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR commandParamParse(char opByteArray[], int paramPos, unsigned int params[], byte paramsLength);
-void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength);
+void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR commandToOpAndParam(char currentToken, byte ret[]);
+void ICACHE_FLASH_ATTR processCommandInputHttp(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage);
+void ICACHE_FLASH_ATTR processCommandInputHttp2(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage);
+void ICACHE_FLASH_ATTR execInputCommands2(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]);
+
 boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte remainingLength, char errorMessage[]);
+
 
 #endif

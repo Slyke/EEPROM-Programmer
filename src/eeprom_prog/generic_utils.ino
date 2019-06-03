@@ -46,3 +46,17 @@ byte ICACHE_FLASH_ATTR hexToInt(char inputHex) {
 
   return res;
 }
+
+extern "C"
+{
+#include <cont.h>
+  extern cont_t* g_pcont;
+  int ICACHE_FLASH_ATTR stackAvailable() {
+    register uint32_t *sp asm("a1");
+    return 4 * (g_pcont->stack - sp);
+  }
+}
+
+long ICACHE_FLASH_ATTR heapAvailable() {
+  return ESP.getFreeHeap();
+}

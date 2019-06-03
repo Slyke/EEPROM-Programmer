@@ -1,50 +1,49 @@
 
-void ICACHE_FLASH_ATTR processCommandInput(char* commSeg) {
-  processCommandInput(commSeg, assemblyInterpretMode);
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, char resMessage[], char errorMessage[], char echoMessage[]) {
+  processCommandInputFromSerial(commSeg, assemblyInterpretMode, resMessage, errorMessage, echoMessage);
 }
 
-void ICACHE_FLASH_ATTR serialCommandInput() {
+void ICACHE_FLASH_ATTR processSerialInput(char resMessage[], char errorMessage[], char echoMessage[]) {
   if (Serial.available()) {
     String serialResponse = Serial.readStringUntil('\n');
     serialResponse.trim();
     char *commSeg = (char *)serialResponse.c_str();
-    processCommandInput(commSeg); 
+    processCommandInputFromSerial(commSeg, resMessage, errorMessage, echoMessage); 
   }
 }
 
-void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode) {
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assemblyMode, char resMessage[], char errorMessage[], char echoMessage[]) {
   char *remaining;
   char *currentToken;
   
   byte paramsLength = 0;
   byte commandDecodeRet[2] = {0};
-  unsigned int params[MAX_OP_PARAM_LENGTH] = {0};
+  int params[MAX_OP_PARAM_LENGTH] = {0};
 
   if (assemblyMode) {
     while ((remaining = strtok_r(commSeg, ";", &commSeg)) != NULL) {
-      commandDecodeRet[0] = 0;
-      commandDecodeRet[1] = 0;
+      memset(commandDecodeRet, 0, sizeof(commandDecodeRet));
       paramsLength = 0;
-      params[0] = 0;
-      params[1] = 0;
+      memset(params, 0, sizeof(params));
       char *commandOp = strtok_r(remaining, " ", &remaining);
-      commandDecode(commandDecodeRet, commandOp, remaining != NULL ? strlen(remaining) : 0, NULL);
-
+      commandDecode(commandDecodeRet, commandOp, remaining != NULL ? strlen(remaining) : 0, errorMessage);
+      
       while ((currentToken = strtok_r(remaining, " ", &remaining)) != NULL && paramsLength < OP_PROCESS_ARR_LIMIT && paramsLength < commandDecodeRet[1]) {
         int res;
         stringToNumber((int *)&res, currentToken);
         params[paramsLength] = res;
         paramsLength++;
+        
       }
 
       char byteArray[paramsLength + 1];
       byteArray[0] = commandDecodeRet[0];
 
-      for (int i = 0; i < MAX_OP_PARAM_LENGTH && i < commandDecodeRet[1]; i++) {
+      for (int i = 0; i < MAX_OP_PARAM_LENGTH && i < paramsLength; i++) {
         byteArray[i + 1] = params[i];
       }
       
-      processCommandInputByteCode(byteArray, commandDecodeRet[1] + 1, NULL);
+      processCommandInputByteCode(byteArray, paramsLength + 1, resMessage, errorMessage, echoMessage);
     }
   } else {
     remaining = commSeg;
@@ -65,14 +64,14 @@ void ICACHE_FLASH_ATTR processCommandInput(char* commSeg, bool assemblyMode) {
         params[j] = byteStream[j + 1];
       }
 
-      execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1]);
+      execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1], resMessage, errorMessage, echoMessage);
 
       i += commandDecodeRet[1];
     }
   }
 }
 
-void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, int* paramLength) {
+void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, char resMessage[], char errorMessage[], char echoMessage[]) {
   char *remaining;
   byte paramsLength = 0;
   byte commandDecodeRet[2] = {0};
@@ -84,31 +83,56 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
       commandParamParse(byteCodeArr, i, params, paramsLength);
 
       if (paramsLength >= commandDecodeRet[1]) {
-        execInputCommands(commandDecodeRet[0], params, paramsLength);
+        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage);
         i += paramsLength;
-        if (paramLength != NULL) {
-          *paramLength = paramsLength;
-        }
-        commandDecodeRet[0] = 0;
-        commandDecodeRet[1] = 0;
+
+        memset(params, 0, sizeof(params));
+        memset(commandDecodeRet, 0, sizeof(commandDecodeRet));
         paramsLength = 0;
-        params[0] = 0;
-        params[1] = 0;
       }
     } else {
       // Command decoder
       commandDecodeRet[0] = 0;
       paramsLength = 0;
-      params[0] = 0;
-      params[1] = 0;
+      memset(params, 0, sizeof(params));
+      memset(commandDecodeRet, 0, sizeof(commandDecodeRet));
       
       commandToOpAndParam(byteCodeArr[i], commandDecodeRet);
       paramsLength = commandDecodeRet[1];
-      if (commandDecodeRet[1] == 0) {
-        execInputCommands(commandDecodeRet[0], params, paramsLength);
-        paramsLength = 0;
+      if (paramsLength == 0) {
+        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage);
+      } else {
+        if (byteCodeLength <= paramsLength) {
+          // This should not execute the OP and instead place an error in errorMessage.
+          execInputCommands(commandDecodeRet[0], params, byteCodeLength - 1, resMessage, errorMessage, echoMessage);
+          break;
+        }
       }
     }
+  }
+}
+
+void ICACHE_FLASH_ATTR processCommandInputHttp(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage) {
+  int commandCount = 0;
+
+  for (int i = 0; i < OP_PROCESS_ARR_LIMIT && i < byteStreamLength; i++) {
+    byte commandDecodeRet[2] = {0};
+    unsigned int params[MAX_OP_PARAM_LENGTH] = {0};
+    
+    resMessage[commandCount] = (char *) calloc(32, sizeof(char));
+    echoMessage[commandCount] = (char *) calloc(32, sizeof(char));
+    
+    commandToOpAndParam(byteStream[i], commandDecodeRet);
+    
+    for (int j = 0; j < MAX_OP_PARAM_LENGTH && j < (commandDecodeRet[1]); j++) {
+      params[j] = byteStream[j + 1];
+    }
+//    unsigned int params2[1] = {0x01};
+//    execInputCommands2(0xe1, params2, 1, NULL, NULL, NULL);
+    execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1], resMessage[commandCount], errorMessage, echoMessage[commandCount]);
+    
+    i += commandDecodeRet[1];
+    commandCount++;
   }
 }
 
@@ -246,206 +270,264 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
   } else {
     char outputBuf[32];
     String strCurrentToken(currentToken);
-    Serial.print(F("err 1; Unknown OP."));
-    Serial.print(F(" Len: ["));
     sprintf(outputBuf, "0x%02x", strCurrentToken.length());
-    Serial.print(outputBuf);
-    Serial.print(F("]. Chars: ["));
+    
+    strcat(errorMessage, (const char*)F("err 1; Unknown OP."));
+    strcat(errorMessage, (const char*)F(" Len: ["));
+    strcat(errorMessage, outputBuf);
+    strcat(errorMessage, (const char*)F("]. Chars: ["));
+
     for (byte i = 0; i < strCurrentToken.length() - 1  && i < 0xFFFF; i++) {
       sprintf(outputBuf, "0x%02x", (byte)currentToken[i]);
-      Serial.print(outputBuf);
-      Serial.print(", ");
+      strcat(errorMessage, outputBuf);
+      strcat(errorMessage, (const char*)F(", "));
     }
     sprintf(outputBuf, "0x%02x", (byte)currentToken[strCurrentToken.length() - 1]);
-    Serial.print(outputBuf);
-    Serial.print("]: ");
-    Serial.println(currentToken);
+    strcat(errorMessage, outputBuf);
+    strcat(errorMessage, (const char*)F("]: "));
+    strcat(errorMessage, currentToken);
     return false;
   }
 
   return true;
 }
 
-void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength) {
+void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]) {
   char outputBuf[32];
+
+  if (resMessage != NULL) {
+    memset(resMessage, 0, sizeof(resMessage));
+  }
+
+  if (errorMessage != NULL) {
+    memset(errorMessage, 0, sizeof(errorMessage));
+  }
+  
+  if (echoMessage != NULL) {
+    memset(echoMessage, 0, sizeof(echoMessage));
+  }
+
   switch(command) {
     case OP_NOP: {
-      Serial.println(F("nop"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("nop"));
+      }
+      
+      if (resMessage != NULL) {
+        strcat(resMessage, (const char*)F("nop"));
+      }
     }
     break;
     case OP_JMP: {
-      if (serialEchoCommand) {
-        Serial.print(F("jmp"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("jmp"));
         sprintf(outputBuf, " 0x%04x", params[0]);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
+
       if (paramsLength < 1) {
-        Serial.println(F("err 2; jmp ("STR_OP_JMP") takes 1 param"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 2; jmp ("STR_OP_JMP") takes 1 param"));
+        }
         break;
       }
       setNewAddress(params[0]);
-      sprintf(outputBuf, "0x%04x", params[0]);
-      Serial.println(outputBuf);
+      if (resMessage != NULL) {
+        sprintf(outputBuf, "0x%04x", params[0]);
+        strcat(resMessage, (const char*)outputBuf);
+      }
     }
     break;
     case OP_AIC: {
-      if (serialEchoCommand) {
-        Serial.println(F("aic"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("aic"));
       }
       setNewAddress(currentAddress + 1);
-      sprintf(outputBuf, "0x%04x", currentAddress);
-      Serial.println(outputBuf);
+      if (resMessage != NULL) {
+        sprintf(outputBuf, "0x%04x", currentAddress);
+        strcat(resMessage, (const char*)outputBuf);
+      }
     }
     break;
     case OP_ADC: {
-      if (serialEchoCommand) {
-        Serial.println(F("adc"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("adc"));
       }
       setNewAddress(currentAddress - 1);
-      sprintf(outputBuf, "0x%04x", currentAddress);
-      Serial.println(outputBuf);
+      if (resMessage != NULL) {
+        sprintf(outputBuf, "0x%04x", currentAddress);
+        strcat(resMessage, (const char*)outputBuf);
+      }
     }
     break;
     case OP_GETC: {
       if (paramsLength == 0) {
-        if (serialEchoCommand) {
-          Serial.println(F("get"));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("get"));
         }
-        sprintf(outputBuf, "0x%04x", currentAddress);
-        Serial.print(outputBuf);
-        sprintf(outputBuf, " 0x%02x", memRead);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%04x", currentAddress);
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, " 0x%02x", memRead);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       }
     }
     break;
     case OP_GET: {
       if (paramsLength == 1) {
-        if (serialEchoCommand) {
-          Serial.print(F("get "));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("get "));
           sprintf(outputBuf, "0x%04x", params[0]);
-          Serial.println(outputBuf);
+          strcat(echoMessage, (const char*)outputBuf);
         }
         const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, params[0], EEPROM_READ_FAILURE);
-        sprintf(outputBuf, "0x%04x", params[0]);
-        Serial.print(outputBuf);
-        sprintf(outputBuf, " 0x%02x", memRead);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%04x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, " 0x%02x", memRead);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       } else {
-        Serial.println(F("err 3; get ("STR_OP_GET") takes 1 param"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 3; get ("STR_OP_GET") takes 1 param"));
+        }
         break;
       }
     }
     break;
     case OP_MOV: {
-      if (serialEchoCommand) {
-        Serial.print(F("mov "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("mov "));
         sprintf(outputBuf, "0x%04x", params[0]);
-        Serial.print(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
         sprintf(outputBuf, " 0x%02x", params[1] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 2) {
         setNewAddress(params[0]);
         exEepromWriteByte(primaryEepromReader, currentAddress, params[1] & 0xFF);
         const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
-        sprintf(outputBuf, "0x%04x", currentAddress);
-        Serial.print(outputBuf);
-        sprintf(outputBuf, " 0x%02x", memRead);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%04x", currentAddress);
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, " 0x%02x", memRead);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       } else {
-        Serial.println(F("err 4; mov ("STR_OP_MOV") takes 2 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 4; mov ("STR_OP_MOV") takes 2 params"));
+        }
         break;
       }
     }
     break;
     case OP_L2M: {
-      if (serialEchoCommand) {
-        Serial.print(F("l2m "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("l2m "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         exEepromWriteByte(primaryEepromReader, currentAddress, params[0] & 0xFF);
         const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
-        sprintf(outputBuf, "0x%04x", currentAddress);
-        Serial.print(outputBuf);
-        sprintf(outputBuf, " 0x%02x", memRead);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%04x", currentAddress);
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, " 0x%02x", memRead);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       } else {
-        Serial.println(F("err 8; "STR_OP_L2M" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 5; "STR_OP_L2M" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_PI2CC: {
       if (paramsLength == 0) {
-        if (serialEchoCommand) {
-          Serial.println(F("pi2c"));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("pi2c"));
         }
-        sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       }
     }
     break;
     case OP_SI2CC: {
       if (paramsLength == 0) {
-        if (serialEchoCommand) {
-          Serial.println(F("si2c"));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("si2c"));
         }
-        sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       }
     }
     break;
     case OP_PI2C: {
-      if (serialEchoCommand) {
-        Serial.print(F("pi2c "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("pi2c "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         primaryEepromAddress = params[0];
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_PI2C" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 6; "STR_OP_PI2C" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_SI2C: {
-      if (serialEchoCommand) {
-        Serial.print(F("si2c "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("si2c "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         secondaryEepromAddress = params[0];
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_SI2C" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 7; "STR_OP_SI2C" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_PERC: {
       if (paramsLength == 0) {
-        if (serialEchoCommand) {
+        if (echoMessage != NULL) {
           Serial.println(F("per"));
         }
-        sprintf(outputBuf, "0x%02x", primaryEepromReader);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", primaryEepromReader);
+          strcat(resMessage, (const char*)outputBuf);
+        }
       }
     }
     break;
     case OP_PER: {
-      if (serialEchoCommand) {
-        Serial.print(F("per "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("per "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         if (params[0] == 0x00) {
@@ -457,22 +539,26 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
         } else {
           primaryEepromReader = primaryEepromAddress;
         }
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.print(outputBuf);
-        Serial.print(F("; "));
-        sprintf(outputBuf, "0x%02x", primaryEepromReader);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat(resMessage, (const char*)F("; "));
+          sprintf(outputBuf, "0x%02x", primaryEepromReader);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_PER" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 8; "STR_OP_PER" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_SERC: {
       if (paramsLength == 0) {
-        if (serialEchoCommand) {
-          Serial.println(F("ser"));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("ser "));
         }
         sprintf(outputBuf, "0x%02x", secondaryEepromReader);
         Serial.println(outputBuf);
@@ -480,10 +566,10 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
     }
     break;
     case OP_SER: {
-      if (serialEchoCommand) {
-        Serial.print(F("ser "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("ser "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         if (params[0] == 0x00) {
@@ -495,23 +581,27 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
         } else {
           secondaryEepromReader = secondaryEepromAddress;
         }
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.print(outputBuf);
-        Serial.print(F("; "));
-        sprintf(outputBuf, "0x%02x", secondaryEepromReader);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat(resMessage, (const char*)F("; "));
+          sprintf(outputBuf, "0x%02x", secondaryEepromReader);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_SER" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 9; "STR_OP_SER" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_PCPY: {
-      if (serialEchoCommand) {
-        Serial.print(F("pcpy "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("pcpy "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 2) {
         const unsigned int startAddress = currentAddress;
@@ -526,65 +616,79 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           const byte readRes = exEepromReadByte(&tmpMem, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
           exEepromWriteByte(secondaryEepromReader, currentAddress, params[0] & 0xFF);
           ioMod.setDisplay(currentScreenValue);
-          sprintf(outputBuf, "0x%02x ", tmpMem);
-          Serial.print(outputBuf);
+          if (resMessage != NULL) {
+            sprintf(outputBuf, "0x%02x ", tmpMem);
+            strcat(resMessage, (const char*)outputBuf);
+          }
         }
         
-        Serial.print('\n');
-        sprintf(outputBuf, "0x%02x", memAddrOffset);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          strcat(resMessage, (const char*)F("\n"));
+          sprintf(outputBuf, "0x%02x", memAddrOffset);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_INT" takes 2 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 10; "STR_OP_INT" takes 2 params"));
+        }
         break;
       }
     }
     break;
     case OP_INT: {
-      if (serialEchoCommand) {
-        Serial.print(F("int "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("int "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         assemblyInterpretMode = params[0] == 0 ? false : true;
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.print(outputBuf);
-        Serial.print("; ");
-        Serial.println(assemblyInterpretMode ? F("true") : F("false"));
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat(resMessage, (const char*)F("; "));
+          strcat(resMessage, assemblyInterpretMode ? (const char*)F("true") : (const char*)F("false"));
+        }
         delay(10);
       } else {
-        Serial.println(F("err 16; "STR_OP_INT" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 11; "STR_OP_INT" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_ECH: {
-      if (serialEchoCommand) {
-        Serial.print(F("ech "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("ech "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         serialEchoCommand = params[0] == 0 ? false : true;
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.print(outputBuf);
-        Serial.print(F("; "));
-        Serial.println(serialEchoCommand ? F("true") : F("false"));
-        delay(10);
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat(resMessage, (const char*)F("; "));
+          strcat(resMessage, serialEchoCommand ? (const char*)F("true") : (const char*)F("false"));
+        }
+        delay(5);
       } else {
-        Serial.println(F("err 32; "STR_OP_ECH" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 12; "STR_OP_ECH" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_ADMP: {
-      if (serialEchoCommand) {
-        Serial.print(F("admp "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("admp "));
         sprintf(outputBuf, "0x%04x", params[0]);
-        Serial.print(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
         sprintf(outputBuf, " 0x%02x", params[1] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 2) {
         setNewAddress(params[0]);
@@ -598,25 +702,30 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           readAndDisplayAddress();
           const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
           ioMod.setDisplay(currentScreenValue);
-          sprintf(outputBuf, "0x%02x ", tmpMemVal);
-          Serial.print(outputBuf);
+          if (resMessage != NULL) {
+            sprintf(outputBuf, "0x%02x ", tmpMemVal);
+            strcat(resMessage, (const char*)outputBuf);
+          }
         }
-        
-        Serial.print('\n');
-        sprintf(outputBuf, "0x%02x", memAddrOffset);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          strcat(resMessage, (const char*)F("\n"));
+          sprintf(outputBuf, "0x%02x", memAddrOffset);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 32; "STR_OP_ADMP" takes 2 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 13; "STR_OP_ADMP" takes 2 params"));
+        }
         break;
       }
     }
     break;
     case OP_CDMP: {
-      if (serialEchoCommand) {
-        Serial.print(F("cdmp "));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("cdmp "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
-        Serial.println(outputBuf);
+        strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
         const unsigned int startAddress = currentAddress;
@@ -630,27 +739,34 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           readAndDisplayAddress();
           const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
           ioMod.setDisplay(currentScreenValue);
-          sprintf(outputBuf, "0x%02x ", tmpMemVal);
-          Serial.print(outputBuf);
+          if (resMessage != NULL) {
+            sprintf(outputBuf, "0x%02x ", tmpMemVal);
+            strcat(resMessage, (const char*)outputBuf);
+          }
         }
-        
-        Serial.print('\n');
-        sprintf(outputBuf, "0x%02x", memAddrOffset);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          strcat(resMessage, (const char*)F("\n"));
+          sprintf(outputBuf, "0x%02x", memAddrOffset);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
       } else {
-        Serial.println(F("err 32; "STR_OP_CDMP" takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 14; "STR_OP_CDMP" takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_RETD: {
-      if (serialEchoCommand) {
-        Serial.println(F("ret"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("ret"));
       }
-      Serial.print(F("ret "));
-      sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
-      Serial.println(outputBuf);
+      if (resMessage != NULL) {
+        strcat(resMessage, (const char*)F("ret "));
+        sprintf(outputBuf, "0x%02x", DEFAULT_RUN_MODE);
+        strcat(resMessage, (const char*)outputBuf);
+      }
       delay(10);
       currentMode = DEFAULT_RUN_MODE;
       ioMod.setLED(TM1638_COLOR_RED, 0);
@@ -661,25 +777,29 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
     break;
     case OP_RET: {
       if (paramsLength == 1) {
-        if (serialEchoCommand) {
-          Serial.print(F("ret "));
+        if (echoMessage != NULL) {
+          strcat(echoMessage, (const char*)F("ret "));
           sprintf(outputBuf, "0x%02x", params[0]);
-          Serial.println(outputBuf);
+          strcat(echoMessage, (const char*)outputBuf);
         }
-        Serial.print(F("ret "));
-        sprintf(outputBuf, "0x%02x", params[0]);
-        Serial.println(outputBuf);
+        if (resMessage != NULL) {
+          strcat(resMessage, (const char*)F("ret "));
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+        }
         delay(10);
         currentMode = params[0];
       } else {
-        Serial.println(F("err 64; ret ("STR_OP_RET") takes 1 params"));
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 15; ret ("STR_OP_RET") takes 1 params"));
+        }
         break;
       }
     }
     break;
     case OP_I2C: {
-      if (serialEchoCommand) {
-        Serial.println(F("i2c"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("i2c"));
       }
       const byte totalDeviceCount = 127;
       int goodDevices[totalDeviceCount];
@@ -688,37 +808,129 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       byte badFoundDevicesLength = 0;
 
       scanI2CDevices(goodDevices, (int)totalDeviceCount, &goodFoundDevicesLength, badDevices, (int)totalDeviceCount, &badFoundDevicesLength);
-
-      if (goodFoundDevicesLength > 0) {
-        Serial.print(F("Good: "));
-        for (int i = 0; i < goodFoundDevicesLength ; i++) {
-          sprintf(outputBuf, "0x%02x ", goodDevices[i]);
-          Serial.print(outputBuf);
+      if (resMessage != NULL) {
+        if (goodFoundDevicesLength > 0) {
+          strcat(resMessage, (const char*)F("Good: "));
+          Serial.print(F("Good: "));
+          for (int i = 0; i < goodFoundDevicesLength ; i++) {
+            sprintf(outputBuf, "0x%02x ", goodDevices[i]);
+            strcat(resMessage, (const char*)outputBuf);
+          }
+          strcat(resMessage, (const char*)F("\n"));
         }
-        Serial.print('\n');
-      }
-
-      if (badFoundDevicesLength > 0) {
-        Serial.print(F("Bad: "));
-        for (int i = 0; i < badFoundDevicesLength ; i++) {
-          sprintf(outputBuf, "0x%02 ", badDevices[i]);
-          Serial.print(outputBuf);
+  
+        if (badFoundDevicesLength > 0) {
+          strcat(resMessage, (const char*)F("Bad: "));
+          for (int i = 0; i < badFoundDevicesLength ; i++) {
+            sprintf(outputBuf, "0x%02 ", badDevices[i]);
+            strcat(resMessage, (const char*)outputBuf);
+          }
+          strcat(resMessage, (const char*)F("\n"));
         }
-        Serial.print('\n');
       }
     }
     break;
     case OP_RST: {
-      if (serialEchoCommand) {
-        Serial.println(F("rst"));
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("rst"));
       }
-      Serial.println(F("RESET"));
+      if (resMessage != NULL) {
+        strcat(resMessage, (const char*)F("RESET"));
+      }
       delay(10);
       Reset();
     }
     break;
   }
+  
   readAndDisplayAddress();
   readAndDisplayMemory();
   ioMod.setDisplay(currentScreenValue);
+}
+
+
+void ICACHE_FLASH_ATTR processCommandInputHttp2(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage) {
+  int commandCount = 0;
+  Serial.println("asd1");
+  for (int i = 0; i < OP_PROCESS_ARR_LIMIT && i < byteStreamLength; i++) {
+    byte commandDecodeRet[2] = {0};
+    unsigned int params[MAX_OP_PARAM_LENGTH] = {0};
+
+    resMessage[commandCount] = (char *) calloc(32, sizeof(char));
+    echoMessage[commandCount] = (char *) calloc(32, sizeof(char));
+
+    commandToOpAndParam(byteStream[i], commandDecodeRet);
+    
+    for (int j = 0; j < MAX_OP_PARAM_LENGTH && j < (commandDecodeRet[1]); j++) {
+      params[j] = byteStream[j + 1];
+    }
+  unsigned int params2[1] = {0x01};
+//    execInputCommands(0xe1, params2, 1, resMessage[commandCount], errorMessage, echoMessage[commandCount]);
+    execInputCommands2(0xe1, params2, 1, NULL, NULL, NULL);
+//    execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1], resMessage[commandCount], errorMessage, echoMessage[commandCount]);
+    
+//    i += commandDecodeRet[1];
+    i += 1;
+    commandCount++;
+  }
+}
+
+
+void ICACHE_FLASH_ATTR execInputCommands2(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]) {
+
+  char outputBuf[32];
+
+  if (resMessage != NULL) {
+    memset(resMessage, 0, sizeof(resMessage));
+  }
+
+  if (errorMessage != NULL) {
+    memset(errorMessage, 0, sizeof(errorMessage));
+  }
+  
+  if (echoMessage != NULL) {
+    memset(echoMessage, 0, sizeof(echoMessage));
+  }
+
+  switch(command) {
+    case OP_ECH: {
+      if (echoMessage != NULL) {
+        strcat(echoMessage, (const char*)F("ech "));
+        sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
+        strcat(echoMessage, (const char*)outputBuf);
+      }
+      if (paramsLength == 1) {
+        serialEchoCommand = params[0] == 0 ? false : true;
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat(resMessage, (const char*)F("; "));
+          strcat(resMessage, serialEchoCommand ? (const char*)F("true") : (const char*)F("false"));
+        }
+        delay(5);
+      } else {
+        if (errorMessage != NULL) {
+          strcat(errorMessage, (const char*)F("err 12; "STR_OP_ECH" takes 1 params"));
+        }
+        break;
+      }
+    }
+    break;
+    default: {
+      Serial.print("Default: ");
+      Serial.println(command);
+    }
+  }
+
+//    Serial.println(" ");
+//    Serial.print("c "); Serial.println(command);
+//    Serial.print("p0: "); Serial.print(params[0]);
+//    Serial.print(" p1: "); Serial.print(params[1]);
+//    Serial.print(" p2: "); Serial.println(params[2]);
+//    Serial.print("pl: "); Serial.println(paramsLength);
+//    Serial.print("resMessage: "); Serial.println(resMessage);
+//    Serial.print("errorMessage: "); Serial.println(errorMessage);
+//    Serial.print("echoMessage: "); Serial.println(echoMessage);
+//    Serial.print(F("heapAvailable: ")); Serial.println(heapAvailable());
+//    Serial.println(" ");
 }

@@ -740,9 +740,9 @@ void setup() {
 
     if (mdnsEnabled == 1) {
       if (MDNS.begin(mdnsName)) {
-        Serial.println("MDNS responder started");
+        Serial.println(F("MDNS responder started"));
       } else {
-        Serial.println("Failed to start MDNS responder");
+        Serial.println(F("Failed to start MDNS responder"));
       }
     }
   }
@@ -753,7 +753,13 @@ void setup() {
   readAndDisplayMemory();
   ioMod.setDisplay(currentScreenValue);
   
-  if (Serial.available()) {
+  Serial.print(F("stackAvailable: "));
+//  Serial.println(stackAvailable());
+  Serial.println(F("--"));
+  Serial.print(F("heapAvailable: "));
+  Serial.println(heapAvailable());
+  
+  if (Serial) {
     Serial.println(F("Device ready"));
   }
 }
@@ -788,7 +794,21 @@ void loop() {
     }
     
     if (Serial.available()) {
-      serialCommandInput();
+      char execRes[1024] = {0};
+      char echoBack[32] = {0};
+      char errorMessage[32] = {0};
+      processSerialInput(execRes, errorMessage, echoBack);
+      if (serialEchoCommand) {
+        if (strlen(execRes) > 0) {
+          Serial.println(echoBack);
+        }
+      }
+      if (strlen(execRes) > 0) {
+        Serial.println(execRes);
+      }
+      if (strlen(errorMessage) > 0) {
+        Serial.println(errorMessage);
+      }
     }
   }
 
