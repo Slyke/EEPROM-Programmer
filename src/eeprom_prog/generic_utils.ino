@@ -53,7 +53,7 @@ extern "C"
   extern cont_t* g_pcont;
   int ICACHE_FLASH_ATTR stackAvailable() {
     register uint32_t *sp asm("a1");
-    return 4 * (g_pcont->stack - sp);
+    return 4 * (sp - g_pcont->stack);
   }
 }
 

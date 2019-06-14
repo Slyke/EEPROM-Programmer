@@ -54,17 +54,17 @@
 #define STR_OP_RST "0xf9"
 
 #define MAX_OP_PARAM_LENGTH 2
+#define DEFAULT_MESSAGE_SIZE 34
 
 void ICACHE_FLASH_ATTR processSerialInput(char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assemblyMode, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR commandParamParse(char opByteArray[], int paramPos, unsigned int params[], byte paramsLength);
+void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength);
 void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]);
 void ICACHE_FLASH_ATTR commandToOpAndParam(char currentToken, byte ret[]);
-void ICACHE_FLASH_ATTR processCommandInputHttp(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage);
-void ICACHE_FLASH_ATTR processCommandInputHttp2(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage);
-void ICACHE_FLASH_ATTR execInputCommands2(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]);
+void ICACHE_FLASH_ATTR processCommandInputHttp(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage, int* commandCount);
 
 boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte remainingLength, char errorMessage[]);
 

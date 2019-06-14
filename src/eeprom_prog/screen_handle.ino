@@ -12,7 +12,9 @@ void ICACHE_FLASH_ATTR updateScreen(unsigned char * value, boolean rightSide) {
 }
 
 void ICACHE_FLASH_ATTR readAndDisplayAddress() {
-  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
+  unsigned char *addrBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+  breakIntToArray(addrBuffer, currentAddress, modeHex);
+
   updateScreen(addrBuffer, false);
   
   if (addrBuffer) {
@@ -22,7 +24,10 @@ void ICACHE_FLASH_ATTR readAndDisplayAddress() {
 
 void ICACHE_FLASH_ATTR readAndDisplayMemory() {
   const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
-  unsigned char *memBuffer = breakIntToArray((byte)memRead, modeHex);
+  
+  unsigned char *memBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+  breakIntToArray(memBuffer, (byte)memRead, modeHex);
+
   if (readRes != 0) {
     updateScreen((unsigned char*)displayError, true);
     updateScreen((unsigned char*)NoRes, false);

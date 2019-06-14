@@ -1,6 +1,13 @@
 #ifndef KEYPAD_HANDLER_H
 #define KEYPAD_HANDLER_H
 
+#define NO_KEY 0x32
+
+const byte pinRows = 4;
+const byte pinCols = 4;
+const byte outputPins[pinRows] = {13, 12, 11, 10};
+const byte inputPins[pinCols] = {9, 8, 7, 6};
+
 const byte keyMap[16] = {
   1,
   2,

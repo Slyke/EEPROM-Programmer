@@ -1,6 +1,23 @@
 #ifndef SCREEN_HANDLE_H
 #define SCREEN_HANDLE_H
 
+const unsigned char displayError[4] = {46, 38, 40, 38};
+const unsigned char displayDec[4] = {16, 13, 14, 12};
+const unsigned char displayHex[4] = {16, 42, 14, 44};
+const unsigned char displayEcho[4] = {46, 12, 42, 0};
+const unsigned char displayOn[4] = {16, 16, 0, 1};
+const unsigned char displayOff[4] = {16, 0, 15, 15};
+const unsigned char NoRes[4] = {18, 18, 18, 18};
+
+// Segment labelling:
+//        A
+//       ----
+//     F |  | B
+//       ---- G
+//     E |  | C
+//       ----   .H
+//        D
+
 #ifdef EZ_MODE
 const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
   //H G F E D C B A

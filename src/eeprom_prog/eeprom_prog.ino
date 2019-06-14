@@ -17,8 +17,6 @@
 #define CLK D6
 #define DIO D5
 
-#define NO_KEY 0x32
-
 #define SEGMENT_COUNT 8
 #define HALF_SEGMENT_COUNT SEGMENT_COUNT / 2
 
@@ -83,28 +81,7 @@
 #define SERVER_LISTEN_PORT 80
 #define MDNS_NAME "eeprom"
 
-#define OP_PROCESS_ARR_LIMIT 512
-
-const byte pinRows = 4;
-const byte pinCols = 4;
-const byte outputPins[pinRows] = {13, 12, 11, 10};
-const byte inputPins[pinCols] = {9, 8, 7, 6};
-const unsigned char displayError[4] = {46, 38, 40, 38};
-const unsigned char displayDec[4] = {16, 13, 14, 12};
-const unsigned char displayHex[4] = {16, 42, 14, 44};
-const unsigned char displayEcho[4] = {46, 12, 42, 0};
-const unsigned char displayOn[4] = {16, 16, 0, 1};
-const unsigned char displayOff[4] = {16, 0, 15, 15};
-const unsigned char NoRes[4] = {18, 18, 18, 18};
-
-// Segment labelling:
-//        A
-//       ----
-//     F |  | B
-//       ---- G
-//     E |  | C
-//       ----   .H
-//        D
+#define OP_PROCESS_ARR_LIMIT 256
 
 byte brightness = 3;
 
@@ -202,7 +179,7 @@ void ICACHE_FLASH_ATTR scanI2CDevices(int devicesList[], int devicesListLenght, 
   }
 }
 
-unsigned char * breakIntToArray(int inputNumber, bool outputHex) {
+void breakIntToArray(unsigned char* res, int inputNumber, bool outputHex) {
   unsigned int modder = 0;
   
   if (outputHex) {
@@ -211,13 +188,11 @@ unsigned char * breakIntToArray(int inputNumber, bool outputHex) {
     modder = 10;
   }
 
-  unsigned char *numberArray = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
-
   unsigned int i = 0;
   unsigned int nCount = inputNumber;
 
   while (nCount != 0) {
-    numberArray[i] = nCount % modder;
+    res[i] = nCount % modder;
     nCount /= modder;
     i++;
   }
@@ -226,18 +201,16 @@ unsigned char * breakIntToArray(int inputNumber, bool outputHex) {
   unsigned char j = 0;
   
   while(i > j) {
-    int temp = numberArray[i];
-    numberArray[i] = numberArray[j];
-    numberArray[j] = temp;
+    int temp = res[i];
+    res[i] = res[j];
+    res[j] = temp;
     i--;
     j++;
   }
-
-  return numberArray;
 }
 
-unsigned char * breakIntToArray(int inputNumber) {
-  return breakIntToArray(inputNumber, true);
+void breakIntToArray(unsigned char* res, int inputNumber) {
+  breakIntToArray(res, inputNumber, true);
 }
 
 void ICACHE_FLASH_ATTR setNewAddress(unsigned int newAddress) {
@@ -357,7 +330,8 @@ void ICACHE_FLASH_ATTR basicAddressInputMode() {
     setCurrentMode(BASIC_MEM_CTRL);
   }
   
-  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
+  unsigned char *addrBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+  breakIntToArray(addrBuffer, currentAddress, modeHex);
   updateScreen(addrBuffer, false);
   if (addrBuffer) {
     free(addrBuffer);
@@ -365,7 +339,8 @@ void ICACHE_FLASH_ATTR basicAddressInputMode() {
 }
 
 void ICACHE_FLASH_ATTR numericAddressInputMode() {
-  unsigned char *addrBuffer = breakIntToArray(currentAddress, modeHex);
+  unsigned char *addrBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+  breakIntToArray(addrBuffer, currentAddress, modeHex);
   
   if (lastKeyPress != NO_KEY) {
     const byte editingDigit = ((HALF_SEGMENT_COUNT - 1) - editingNumericDigitLight);
@@ -451,7 +426,9 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
     const byte editingDigit = HALF_SEGMENT_COUNT - (editingNumericDigitLight - (HALF_SEGMENT_COUNT - 1));
     tempMemoryEdit = setDigit(tempMemoryEdit, keyMap[lastKeyPress], editingDigit, modeHex ? 0x10 : 10) & 0xFF;
     
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -467,7 +444,10 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
     }
     ioMod.setDisplay(currentScreenValue);
     delay(1000);
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -485,7 +465,9 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
     }
     tempMemoryEdit = setDigit(tempMemoryEdit, (int)tmpDigit, editingDigit, modeHex ? 0x10 : 10) & 0xFF;
     
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -503,7 +485,9 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
     }
     tempMemoryEdit = setDigit(tempMemoryEdit, tmpDigit, editingDigit, modeHex ? 0x10 : 10) & 0xFF;
     
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -536,7 +520,10 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
 
   if (ioMod.getButtons() == 0b01000000 || ioMod.getButtons() == 0b00100000) {
     tempMemoryEdit = memRead;
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -574,7 +561,10 @@ void ICACHE_FLASH_ATTR basicMemoryInput() {
     }
     ioMod.setDisplay(currentScreenValue);
     delay(1000);
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -584,7 +574,10 @@ void ICACHE_FLASH_ATTR basicMemoryInput() {
 
   if (ioMod.getButtons() == 0b00000001) {
     tempMemoryEdit++;
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -593,7 +586,10 @@ void ICACHE_FLASH_ATTR basicMemoryInput() {
 
   if (ioMod.getButtons() == 0b00000010) {
     tempMemoryEdit--;
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -612,7 +608,10 @@ void ICACHE_FLASH_ATTR basicMemoryInput() {
   
   if (ioMod.getButtons() == 0b01000000 || ioMod.getButtons() == 0b00100000) {
     tempMemoryEdit = memRead;
-    unsigned char *tempMemoryEditBuffer = breakIntToArray(tempMemoryEdit, modeHex);
+
+    unsigned char *tempMemoryEditBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
+    breakIntToArray(tempMemoryEditBuffer, tempMemoryEdit, modeHex);
+
     updateScreen(tempMemoryEditBuffer, true);
     if (tempMemoryEditBuffer) {
       free(tempMemoryEditBuffer);
@@ -673,7 +672,7 @@ void setup() {
 
   if (enableSerialConn == 1) {
     Serial.begin(serialConnSpeed);
-    Serial.println(F("Device booting"));
+    Serial.println(F("\nDevice booting"));
   }
   
   setupKeypadMatrixPins();
@@ -732,7 +731,7 @@ void setup() {
 //      webServer = new ESP8266WebServer(webserverListenPort);
 
       webServer.on("/", httpHandleRoot);
-      webServer.on("/exec", httpHandleRoot);
+      webServer.on("/exec", httpHandleExec);
       webServer.on("/int", httpHandleInt);
       webServer.onNotFound(httpHandleNotFound);
       webServer.begin();
@@ -788,18 +787,18 @@ void loop() {
   if (enableSerialConn == 1) {
     if (!Serial) {
       Serial.begin(serialConnSpeed);
-      if (Serial.available()) {
+      if (Serial) {
         Serial.println("Serial Listening...");
       }
     }
     
     if (Serial.available()) {
-      char execRes[1024] = {0};
-      char echoBack[32] = {0};
-      char errorMessage[32] = {0};
+      char execRes[OP_PROCESS_ARR_LIMIT] = {0};
+      char echoBack[DEFAULT_MESSAGE_SIZE] = {0};
+      char errorMessage[DEFAULT_MESSAGE_SIZE] = {0};
       processSerialInput(execRes, errorMessage, echoBack);
       if (serialEchoCommand) {
-        if (strlen(execRes) > 0) {
+        if (strlen(echoBack) > 0) {
           Serial.println(echoBack);
         }
       }
