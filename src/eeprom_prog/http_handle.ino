@@ -22,7 +22,20 @@ void ICACHE_FLASH_ATTR httpHandleRoot() {
 }
 
 void ICACHE_FLASH_ATTR httpHandleExec() {
-  if (webServer.arg("command") == "") {
+  char execRes[OP_PROCESS_ARR_LIMIT] = {0};
+  char echoBack[DEFAULT_MESSAGE_SIZE] = {0};
+  char errorMessage[DEFAULT_MESSAGE_SIZE] = {0};
+
+  byte paramsLength = 0;
+  char commandIn[16];
+  char param1[8];
+  char param2[8];
+
+  if (webServer.arg("command") != "") {
+    webServer.arg("command").substring(0, 15).toCharArray(commandIn, 16);
+  } else if (webServer.arg("c") != "") {
+    webServer.arg("c").substring(0, 15).toCharArray(commandIn, 16);
+  } else {
     char* errorMsg = strdup((const char*)F("/exec requires command param"));
     httpSendIntError(errorMsg);
     if (errorMsg) {
@@ -31,8 +44,58 @@ void ICACHE_FLASH_ATTR httpHandleExec() {
     return;
   }
 
-  webServer.send(200, "application/json", "");
+  if (webServer.arg("param1") != "") {
+    paramsLength++;
+    webServer.arg("param1").substring(0, 7).toCharArray(param1, 8);
+  } else if (webServer.arg("p1") != "") {
+    paramsLength++;
+    webServer.arg("p1").substring(0, 7).toCharArray(param1, 8);
+  }
 
+  if (paramsLength > 0) {
+    if (webServer.arg("param2") != "") {
+      paramsLength++;
+      webServer.arg("param2").substring(0, 7).toCharArray(param2, 8);
+    } else if (webServer.arg("p2") != "") {
+      paramsLength++;
+      webServer.arg("p2").substring(0, 7).toCharArray(param2, 8);
+    }
+  }
+
+  processCommandInputFromHttp(commandIn, param1, param2, paramsLength, execRes, errorMessage, echoBack, OP_PROCESS_ARR_LIMIT, DEFAULT_MESSAGE_SIZE, DEFAULT_MESSAGE_SIZE);
+
+  if (strlen(errorMessage) > 0) {
+    httpSendIntError(errorMessage);
+    return;
+  }
+
+  if (webServer.arg("json") == "") {
+    webServer.send(200, "application/json", execRes);
+  } else {
+    DynamicJsonDocument JSONResponseBuffer(256);
+    char JSONResponseMessageBuffer[256];
+  
+    JsonObject JSONResponseEncoder = JSONResponseBuffer.to<JsonObject>();
+    JSONResponseEncoder["payload"];
+    JSONResponseEncoder["payload"]["meta"];
+    JSONResponseEncoder["payload"]["status"];
+    JSONResponseEncoder["payload"]["result"];
+  
+    JSONResponseEncoder["payload"]["meta"]["uptime"] = millis();
+    JSONResponseEncoder["payload"]["meta"]["heapAvailable"] = heapAvailable();
+    JSONResponseEncoder["payload"]["meta"]["stackAvailable"] = stackAvailable();
+  
+    JSONResponseEncoder["payload"]["status"]["code"] = "200";
+    
+    JSONResponseEncoder["payload"]["result"]["response"] = execRes;
+    JSONResponseEncoder["payload"]["result"]["echo"] = echoBack;
+  
+    serializeJson(JSONResponseEncoder, JSONResponseMessageBuffer);
+  
+    delay(100); // Give power time to stablise to avoid low power crashes
+    
+    webServer.send(200, "application/json", JSONResponseMessageBuffer);
+  }
 }
 
 void ICACHE_FLASH_ATTR httpSendIntError(int locIndex, char* errorChars, char* errorMessage) {
@@ -106,163 +169,163 @@ void ICACHE_FLASH_ATTR httpHandleInt() {
     }
     return;
   }
-  return;
-//  DynamicJsonDocument JSONbuffer(512);
-//  deserializeJson(JSONbuffer, webServer.arg("plain"));
-//
-//  JsonArray opList = JSONbuffer["ops"];
-//  char codeList[OP_PROCESS_ARR_LIMIT];
-//  int byteIndex = 0;
-//
-//  for(JsonVariant elem: opList) {
-//    if (byteIndex > OP_PROCESS_ARR_LIMIT) {
-//      JSONbuffer.clear();
-//      char* errorMsg = strdup((const char*)F("Byte array length exceeds 512"));
-//      httpSendIntError(errorMsg);
-//      if (errorMsg) {
-//        free(errorMsg);
-//      }
-//      return;
-//    }
-//    if (elem.is<char*>()) {
-//      unsigned int res;
-//      char* inputChar = strdup(elem.as<char*>());
-//      boolean numRes = stringToNumber((int *)&res, inputChar);
-//      if (inputChar) {
-//        free(inputChar);
-//      }
-//      if (!numRes) {
-//        char* errorMsg = strdup((const char*)F("Invalid character in OP list"));
-//        httpSendIntError(byteIndex, inputChar, errorMsg);
-//        if (errorMsg) {
-//          free(errorMsg);
-//        }
-//        return;
-//      }
-//      codeList[byteIndex] = res;
-//      byteIndex++;
-//    } else if (elem.is<byte>()) {
-//      codeList[byteIndex] = elem.as<byte>();
-//      byteIndex++;
-//    } else if (elem.is<int>()) {
-//      int res = elem.as<int>();
-//      if (res > 0xFFFF) {
-//        JSONbuffer.clear();
-//        char* errorMsg = strdup((const char*)F("Input number exceeds 0xFFFF (65535)"));
-//        httpSendIntError(byteIndex, (char *)elem.as<int>(), errorMsg);
-//        if (errorMsg) {
-//          free(errorMsg);
-//        }
-//        return;
-//      }
-//      codeList[byteIndex] = res & 0xFFFF;
-//      byteIndex++;
-//    } else {
-//      JSONbuffer.clear();
-//      DynamicJsonDocument JSONErrorBuffer(512);
-//      char JSONErrorMessageBuffer[512];
-//      
-//      JsonObject JSONErrorEncoder = JSONErrorBuffer.to<JsonObject>();
-//      JSONErrorEncoder["payload"];
-//      JSONErrorEncoder["payload"]["meta"];
-//      JSONErrorEncoder["payload"]["status"];
-//    
-//      JSONErrorEncoder["payload"]["meta"]["uptime"] = millis();
-//      JSONErrorEncoder["payload"]["meta"]["heapAvailable"] = heapAvailable();
-//      JSONErrorEncoder["payload"]["meta"]["stackAvailable"] = stackAvailable();
-//    
-//      JSONErrorEncoder["payload"]["status"]["code"] = F("400");
-//      JSONErrorEncoder["payload"]["status"]["codeMessage"] = F("Bad Request");
-//      JSONErrorEncoder["payload"]["status"][F("errorDescription")] = F("OPs array does not only contain String<byte> or int types.");
-//      JSONErrorEncoder["payload"]["status"][F("goodExample")] = F("{'ops': ['0x04', '0x05', 5, 7]}");
-//      JSONErrorEncoder["payload"]["status"][F("badExample")] = F("{'ops': [0x04, 0x05, A, B, [1, 2], {'some': 'obj'} ]}");
-//
-//      serializeJson(JSONErrorEncoder, JSONErrorMessageBuffer);
-//      
-//      webServer.send(400, "application/json", JSONErrorMessageBuffer);
-//      return;
-//    }
-//  }
-//
-//  JSONbuffer.clear();
-//  
-//  char errorMessage[DEFAULT_MESSAGE_SIZE] = {0};
-//
-//  // Store the string result of each of the commands into an array of strings.
-//  char **execRes = (char **) calloc(byteIndex, sizeof(char*));
-//  char **echoBack = (char **) calloc(byteIndex, sizeof(char*));
-//
-//  if (**execRes == NULL) {
-//    strcpy(errorMessage, "RAM alloc for **execRes fail");
-//    Serial.println(errorMessage);
-//    httpSendIntError(errorMessage);
-//    return;
-//  }
-//  
-//  if (**execRes == NULL) {
-//    strcpy(errorMessage, "RAM alloc for **echoBack fail");
-//    httpSendIntError(errorMessage);
-//    return;
-//  }
-//
-//  int commandCount = 0;
-//  // Basically loops and parses the inputs into commands to execute on the EEPROM memory
-//    processCommandInputHttp(codeList, byteIndex, execRes, errorMessage, echoBack, &commandCount); // Function is in serial_http_prog.ino
-//
-//  if (strlen(errorMessage) > 0) {
-//    httpSendIntError(errorMessage);
-//    return;
-//  }
-//
-//  DynamicJsonDocument JSONResponseBuffer(256);
-//  char JSONResponseMessageBuffer[256];
-//
-//  JsonObject JSONResponseEncoder = JSONResponseBuffer.to<JsonObject>();
-//  JSONResponseEncoder["payload"];
-//  JSONResponseEncoder["payload"]["meta"];
-//  JSONResponseEncoder["payload"]["status"];
-//
-//  JSONResponseEncoder["payload"]["meta"]["uptime"] = millis();
-//  JSONResponseEncoder["payload"]["meta"]["heapAvailable"] = heapAvailable();
-//  JSONResponseEncoder["payload"]["meta"]["stackAvailable"] = stackAvailable();
-//
-//  JSONResponseEncoder["payload"]["status"]["code"] = "200";
-//
-//  JsonArray jsonExecRes = JSONResponseEncoder.createNestedArray("execRes");
-//  JsonArray jsonEchoBack = JSONResponseEncoder.createNestedArray("echoBack");
-//
-//  for (int i = 0; i < commandCount; i++) {
-//    jsonExecRes.add(execRes[i]);
-//    jsonEchoBack.add(echoBack[i]);
-//  }
-//
-//  JSONResponseEncoder["payload"]["status"][F("execRes")] = execRes;
-//  JSONResponseEncoder["payload"]["status"][F("echoBack")] = echoBack;
-//
-//  serializeJson(JSONResponseEncoder, JSONResponseMessageBuffer);
-//
-//  delay(100); // Give power time to stablise to avoid low power crashes
-//  
-//  webServer.send(200, "application/json", JSONResponseMessageBuffer);
-//  
-//  for (int i = 0; i < OP_PROCESS_ARR_LIMIT && i < byteIndex; i++) {
-//    if (execRes[i]) {
-//      free(execRes[i]);
-//    }
-//
-//    if (echoBack[i]) {
-//      free(echoBack[i]);
-//    }
-//  }
-//  
-//  if (execRes) {
-//    free(execRes);
-//  }
-//  if (echoBack) {
-//    free(echoBack);
-//  }
-//  
-//  delay(50);
+
+  DynamicJsonDocument JSONbuffer(512);
+  deserializeJson(JSONbuffer, webServer.arg("plain"));
+
+  JsonArray opList = JSONbuffer["ops"];
+  char codeList[OP_PROCESS_ARR_LIMIT];
+  int byteIndex = 0;
+
+  for(JsonVariant elem: opList) {
+    if (byteIndex > OP_PROCESS_ARR_LIMIT) {
+      JSONbuffer.clear();
+      char* errorMsg = strdup((const char*)F("Byte array length exceeds 512"));
+      httpSendIntError(errorMsg);
+      if (errorMsg) {
+        free(errorMsg);
+      }
+      return;
+    }
+    if (elem.is<char*>()) {
+      unsigned int res;
+      char* inputChar = strdup(elem.as<char*>());
+      boolean numRes = stringToNumber((int *)&res, inputChar);
+      if (inputChar) {
+        free(inputChar);
+      }
+      if (!numRes) {
+        char* errorMsg = strdup((const char*)F("Invalid character in OP list"));
+        httpSendIntError(byteIndex, inputChar, errorMsg);
+        if (errorMsg) {
+          free(errorMsg);
+        }
+        return;
+      }
+      codeList[byteIndex] = res;
+      byteIndex++;
+    } else if (elem.is<byte>()) {
+      codeList[byteIndex] = elem.as<byte>();
+      byteIndex++;
+    } else if (elem.is<int>()) {
+      int res = elem.as<int>();
+      if (res > 0xFFFF) {
+        JSONbuffer.clear();
+        char* errorMsg = strdup((const char*)F("Input number exceeds 0xFFFF (65535)"));
+        httpSendIntError(byteIndex, (char *)elem.as<int>(), errorMsg);
+        if (errorMsg) {
+          free(errorMsg);
+        }
+        return;
+      }
+      codeList[byteIndex] = res & 0xFFFF;
+      byteIndex++;
+    } else {
+      JSONbuffer.clear();
+      DynamicJsonDocument JSONErrorBuffer(512);
+      char JSONErrorMessageBuffer[512];
+      
+      JsonObject JSONErrorEncoder = JSONErrorBuffer.to<JsonObject>();
+      JSONErrorEncoder["payload"];
+      JSONErrorEncoder["payload"]["meta"];
+      JSONErrorEncoder["payload"]["status"];
+    
+      JSONErrorEncoder["payload"]["meta"]["uptime"] = millis();
+      JSONErrorEncoder["payload"]["meta"]["heapAvailable"] = heapAvailable();
+      JSONErrorEncoder["payload"]["meta"]["stackAvailable"] = stackAvailable();
+    
+      JSONErrorEncoder["payload"]["status"]["code"] = F("400");
+      JSONErrorEncoder["payload"]["status"]["codeMessage"] = F("Bad Request");
+      JSONErrorEncoder["payload"]["status"][F("errorDescription")] = F("OPs array does not only contain String<byte> or int types.");
+      JSONErrorEncoder["payload"]["status"][F("goodExample")] = F("{'ops': ['0x04', '0x05', 5, 7]}");
+      JSONErrorEncoder["payload"]["status"][F("badExample")] = F("{'ops': [0x04, 0x05, A, B, [1, 2], {'some': 'obj'} ]}");
+
+      serializeJson(JSONErrorEncoder, JSONErrorMessageBuffer);
+      
+      webServer.send(400, "application/json", JSONErrorMessageBuffer);
+      return;
+    }
+  }
+
+  JSONbuffer.clear();
+  
+  char errorMessage[DEFAULT_MESSAGE_SIZE] = {0};
+
+  // Store the string result of each of the commands into an array of strings.
+  char **execRes = (char **) calloc(byteIndex, sizeof(char*));
+  char **echoBack = (char **) calloc(byteIndex, sizeof(char*));
+
+  if (**execRes == NULL) {
+    strcpy(errorMessage, "RAM alloc for **execRes fail");
+    Serial.println(errorMessage);
+    httpSendIntError(errorMessage);
+    return;
+  }
+  
+  if (**execRes == NULL) {
+    strcpy(errorMessage, "RAM alloc for **echoBack fail");
+    httpSendIntError(errorMessage);
+    return;
+  }
+
+  int commandCount = 0;
+  // Basically loops and parses the inputs into commands to execute on the EEPROM memory
+    processCommandInputJson(codeList, byteIndex, execRes, errorMessage, echoBack, &commandCount); // Function is in serial_http_prog.ino
+
+  if (strlen(errorMessage) > 0) {
+    httpSendIntError(errorMessage);
+    return;
+  }
+
+  DynamicJsonDocument JSONResponseBuffer(256);
+  char JSONResponseMessageBuffer[256];
+
+  JsonObject JSONResponseEncoder = JSONResponseBuffer.to<JsonObject>();
+  JSONResponseEncoder["payload"];
+  JSONResponseEncoder["payload"]["meta"];
+  JSONResponseEncoder["payload"]["status"];
+
+  JSONResponseEncoder["payload"]["meta"]["uptime"] = millis();
+  JSONResponseEncoder["payload"]["meta"]["heapAvailable"] = heapAvailable();
+  JSONResponseEncoder["payload"]["meta"]["stackAvailable"] = stackAvailable();
+
+  JSONResponseEncoder["payload"]["status"]["code"] = "200";
+
+  JsonArray jsonExecRes = JSONResponseEncoder.createNestedArray("execRes");
+  JsonArray jsonEchoBack = JSONResponseEncoder.createNestedArray("echoBack");
+
+  for (int i = 0; i < commandCount; i++) {
+    jsonExecRes.add(execRes[i]);
+    jsonEchoBack.add(echoBack[i]);
+  }
+
+  JSONResponseEncoder["payload"]["status"][F("execRes")] = execRes;
+  JSONResponseEncoder["payload"]["status"][F("echoBack")] = echoBack;
+
+  serializeJson(JSONResponseEncoder, JSONResponseMessageBuffer);
+
+  delay(100); // Give power time to stablise to avoid low power crashes
+  
+  webServer.send(200, "application/json", JSONResponseMessageBuffer);
+  
+  for (int i = 0; i < OP_PROCESS_ARR_LIMIT && i < byteIndex; i++) {
+    if (execRes[i]) {
+      free(execRes[i]);
+    }
+
+    if (echoBack[i]) {
+      free(echoBack[i]);
+    }
+  }
+  
+  if (execRes) {
+    free(execRes);
+  }
+  if (echoBack) {
+    free(echoBack);
+  }
+  
+  delay(50);
 }
 
 void ICACHE_FLASH_ATTR httpHandleNotFound() {

@@ -1,18 +1,18 @@
 
-void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, char resMessage[], char errorMessage[], char echoMessage[]) {
-  processCommandInputFromSerial(commSeg, assemblyInterpretMode, resMessage, errorMessage, echoMessage);
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
+  processCommandInputFromSerial(commSeg, assemblyInterpretMode, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
 }
 
-void ICACHE_FLASH_ATTR processSerialInput(char resMessage[], char errorMessage[], char echoMessage[]) {
+void ICACHE_FLASH_ATTR processSerialInput(char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
   if (Serial.available()) {
     String serialResponse = Serial.readStringUntil('\n');
     serialResponse.trim();
     char *commSeg = (char *)serialResponse.c_str();
-    processCommandInputFromSerial(commSeg, resMessage, errorMessage, echoMessage); 
+    processCommandInputFromSerial(commSeg, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength); 
   }
 }
 
-void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assemblyMode, char resMessage[], char errorMessage[], char echoMessage[]) {
+void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assemblyMode, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
   char *remaining;
   char *currentToken;
   
@@ -41,7 +41,7 @@ void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assembl
       for (int i = 0; i < MAX_OP_PARAM_LENGTH && i < paramsLength; i++) {
         byteArray[i + 1] = params[i];
       }
-      processCommandInputByteCode(byteArray, paramsLength + 1, resMessage, errorMessage, echoMessage);
+      processCommandInputByteCode(byteArray, paramsLength + 1, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
     }
   } else {
     remaining = commSeg;
@@ -62,14 +62,14 @@ void ICACHE_FLASH_ATTR processCommandInputFromSerial(char* commSeg, bool assembl
         params[j] = byteStream[j + 1];
       }
 
-      execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1], resMessage, errorMessage, echoMessage);
+      execInputCommands(commandDecodeRet[0], params, commandDecodeRet[1], resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
 
       i += commandDecodeRet[1];
     }
   }
 }
 
-void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, char resMessage[], char errorMessage[], char echoMessage[]) {
+void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCodeLength, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
   char *remaining;
   byte paramsLength = 0;
   byte commandDecodeRet[2] = {0};
@@ -81,7 +81,7 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
       commandParamParse(byteCodeArr, i, params, paramsLength);
 
       if (paramsLength >= commandDecodeRet[1]) {
-        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage);
+        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
         i += paramsLength;
 
         memset(params, 0, sizeof(params) * MAX_OP_PARAM_LENGTH);
@@ -98,11 +98,11 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
       commandToOpAndParam(byteCodeArr[i], commandDecodeRet);
       paramsLength = commandDecodeRet[1];
       if (paramsLength == 0) {
-        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage);
+        execInputCommands(commandDecodeRet[0], params, paramsLength, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
       } else {
         if (byteCodeLength <= paramsLength) {
           // This should not execute the OP and instead place an error in errorMessage.
-          execInputCommands(commandDecodeRet[0], params, byteCodeLength - 1, resMessage, errorMessage, echoMessage);
+          execInputCommands(commandDecodeRet[0], params, byteCodeLength - 1, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
           break;
         }
       }
@@ -110,7 +110,26 @@ void ICACHE_FLASH_ATTR processCommandInputByteCode(char* byteCodeArr, int byteCo
   }
 }
 
-void ICACHE_FLASH_ATTR processCommandInputHttp(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage, int* commandCount) {
+void ICACHE_FLASH_ATTR processCommandInputFromHttp(char* commStr, char* paramStr1, char* paramStr2, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
+  byte commandDecodeRet[2] = {0};
+  unsigned int params[MAX_OP_PARAM_LENGTH] = {0};
+  int paramCount = 0;
+
+  if (paramsLength > 0 && paramStr1 != NULL) {
+    stringToNumber((int *)&params[0], paramStr1);
+    paramCount++;
+    if (paramsLength > 1 && paramStr2 != NULL) {
+      paramCount++;
+      stringToNumber((int *)&params[1], paramStr2);
+    }
+  }
+  
+  commandDecode(commandDecodeRet, commStr, paramsLength, errorMessage);
+
+  execInputCommands(commandDecodeRet[0], params, paramCount, resMessage, errorMessage, echoMessage, resMessageLength, errorMessageLength, echoMessageLength);
+}
+
+void ICACHE_FLASH_ATTR processCommandInputJson(char* byteStream, int byteStreamLength, char **resMessage, char errorMessage[], char **echoMessage, int* commandCount) {
   *commandCount = 0;
 
   for (int i = 0; i < OP_PROCESS_ARR_LIMIT && i < byteStreamLength; i++) {
@@ -227,6 +246,8 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
     commandToOpAndParam(OP_RET, ret);
   } else if (strcmp(currentToken, STR_OP_RST) == 0) {
     commandToOpAndParam(OP_RST, ret);
+  } else if (strcmp(currentToken, STR_OP_STAT) == 0) {
+    commandToOpAndParam(OP_STAT, ret);
   } else if (strcmp(currentToken, "nop") == 0) {
     commandToOpAndParam(OP_NOP, ret);
   } else if (strcmp(currentToken, "jmp") == 0) {
@@ -283,6 +304,8 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
     }
   } else if (strcmp(currentToken, "rst") == 0) {
     commandToOpAndParam(OP_RST, ret);
+  } else if (strcmp(currentToken, "stat") == 0) {
+    commandToOpAndParam(OP_STAT, ret);
   } else {
     char outputBuf[32];
     String strCurrentToken(currentToken);
@@ -308,23 +331,19 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
   return true;
 }
 
-void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[]) {
-  execInputCommands(command, params, paramsLength, resMessage, errorMessage, echoMessage, DEFAULT_MESSAGE_SIZE, DEFAULT_MESSAGE_SIZE, DEFAULT_MESSAGE_SIZE);
-}
-
 void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byte paramsLength, char resMessage[], char errorMessage[], char echoMessage[], int resMessageLength, int errorMessageLength, int echoMessageLength) {
   char outputBuf[32];
 
   if (resMessage != NULL) {
-    memset(resMessage, '\0', sizeof(resMessage) * resMessageLength);
+    memset(resMessage, '\0', sizeof(char) * resMessageLength);
   }
 
   if (errorMessage != NULL) {
-    memset(errorMessage, '\0', sizeof(errorMessage) * errorMessageLength);
+    memset(errorMessage, '\0', sizeof(char) * errorMessageLength);
   }
 
   if (echoMessage != NULL) {
-    memset(echoMessage, '\0', sizeof(echoMessage) * echoMessageLength);
+    memset(echoMessage, '\0', sizeof(char) * echoMessageLength);
   }
 
   switch(command) {
@@ -395,11 +414,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
     }
     break;
     case OP_GETC: {
-                Serial.println("    pp");
-                Serial.print(params[0]);
-                Serial.println("    p1");
       if (paramsLength == 1) {
-        Serial.println("    p good");
         if (echoMessage != NULL) {
           strcat_P(echoMessage, (const char*)F("get "));
           sprintf(outputBuf, "0x%04x", params[0]);
@@ -413,7 +428,6 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           strcat(resMessage, (const char*)outputBuf);
         }
       } else {
-        Serial.println("    p bad");
         if (errorMessage != NULL) {
           strcat_P(errorMessage, (const char*)F("err 3; get ("STR_OP_GET") takes 1 param"));
         }
@@ -865,6 +879,26 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
       delay(10);
       Reset();
+    }
+    break;
+    case OP_STAT: {
+      if (paramsLength == 0) {
+        if (echoMessage != NULL) {
+          strcat_P(echoMessage, (const char*)F("stat"));
+        }
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "Uptime: %d\r\n", millis());
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, "Heap: %d\r\n", heapAvailable());
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, "Stack: %d\r\n", stackAvailable());
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, "IP: %s\r\n", WiFi.localIP().toString().c_str());
+          strcat(resMessage, (const char*)outputBuf);
+          sprintf(outputBuf, "RSSI: %d\r\n", (long)WiFi.RSSI());
+          strcat(resMessage, (const char*)outputBuf);
+        }
+      }
     }
     break;
   }

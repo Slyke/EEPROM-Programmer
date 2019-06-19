@@ -796,7 +796,7 @@ void loop() {
       char execRes[OP_PROCESS_ARR_LIMIT] = {0};
       char echoBack[DEFAULT_MESSAGE_SIZE] = {0};
       char errorMessage[DEFAULT_MESSAGE_SIZE] = {0};
-      processSerialInput(execRes, errorMessage, echoBack);
+      processSerialInput(execRes, errorMessage, echoBack, OP_PROCESS_ARR_LIMIT, DEFAULT_MESSAGE_SIZE, DEFAULT_MESSAGE_SIZE);
       if (serialEchoCommand) {
         if (strlen(echoBack) > 0) {
           Serial.println(echoBack);
