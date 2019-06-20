@@ -1,50 +1,26 @@
 
-byte ICACHE_FLASH_ATTR decodeKeypad() {
-  static bool noPress = 0;
-  
-  for(byte i = 0; i < pinCols; i++) {
-    if (digitalRead(inputPins[i]) == HIGH);
-    else
-    break;
-    if(i == (pinCols - 1)) {
-      noPress = 1;
-      scanR = 0;
-      scanC = 0;
+const unsigned int ICACHE_FLASH_ATTR getKeyStates() {
+  unsigned int res = 0;
+  for(byte r = 0; r < pinCols; r++) {
+    PCF_20.write(outputPins[r], LOW);
+    for(byte c = 0; c < pinRows; c++) {
+      if (PCF_20.read(inputPins[c]) == LOW) {
+        res += (1 << (c + (r * 4)));
+      }
     }
+    PCF_20.write(outputPins[r], HIGH);
   }
-  
-  if(noPress == 1) {
-    for(byte i = 0; i < pinRows; i++) {
-      digitalWrite(outputPins[i], LOW);
-    }
-    
-    for(byte i = 0; i < pinCols; i++) {
-      if(digitalRead(inputPins[i]) == HIGH) {
-        continue;
-      } else {
-        for (scanR = 0; scanR < pinRows; scanR++) {
-          digitalWrite(outputPins[scanR], HIGH);   
-          if(digitalRead(inputPins[i]) == HIGH) {
-            noPress = 0;               
-            for(scanC = 0; scanC < pinRows; scanC++) {
-              digitalWrite(outputPins[scanC], LOW);
-            }
-            return scanR * pinRows + i;  
-          }
-        }
+
+  return res;
+}
+
+byte ICACHE_FLASH_ATTR decodeKeypad(const unsigned int keypadState) {
+  if (keypadState != 0) {
+    for (byte i = 1; i <= 16; i++) {
+      if (isNthBitSet(keypadState, i)) {
+        return i - 1;
       }
     }
   }
-
- return NO_KEY;
-}
-
-void ICACHE_FLASH_ATTR setupKeypadMatrixPins() {
-  return;
-  for(byte i = 0; i < pinRows; i++) {
-    pinMode(outputPins[i],OUTPUT);
-  }
-  for(byte j = 0; j < pinCols; j++) {
-    pinMode(inputPins[j],INPUT_PULLUP);
-  }
+  return NO_KEY;
 }

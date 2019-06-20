@@ -5,29 +5,29 @@
 
 const byte pinRows = 4;
 const byte pinCols = 4;
-const byte outputPins[pinRows] = {13, 12, 11, 10};
-const byte inputPins[pinCols] = {9, 8, 7, 6};
+const byte outputPins[pinRows] = {4, 5, 6, 7};
+const byte inputPins[pinCols] = {0, 1, 2, 3};
 
 const byte keyMap[16] = {
-  1,
-  2,
-  3,
-  10,
-  4,
-  5,
-  6,
-  11,
-  7,
-  8,
-  9,
-  12,
-  14,
-  0,
+  13,
   15,
-  13
+  0,
+  14,
+  12,
+  9,
+  8,
+  7,
+  11,
+  6,
+  5,
+  4,
+  10,
+  3,
+  2,
+  1
 };
 
-byte ICACHE_FLASH_ATTR decodeKeypad();
-void ICACHE_FLASH_ATTR setupKeypadMatrixPins();
+const unsigned int ICACHE_FLASH_ATTR getKeyStates();
+byte ICACHE_FLASH_ATTR decodeKeypad(const unsigned int keypadState);
 
 #endif

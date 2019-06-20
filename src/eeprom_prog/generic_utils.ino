@@ -24,6 +24,13 @@ boolean ICACHE_FLASH_ATTR stringToNumber(int* res, char inputChar[]) {
   return false;
 }
 
+boolean isNthBitSet(int bitNumber, int nthBit) {
+  if (bitNumber & (1 << (nthBit - 1))) {
+    return true;
+  }
+  return false;
+} 
+
 unsigned char ICACHE_FLASH_ATTR bitsToChar(char *bitArr, unsigned int arrSize) {
   unsigned char res = 0;
 

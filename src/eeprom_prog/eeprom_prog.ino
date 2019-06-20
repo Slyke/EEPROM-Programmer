@@ -4,6 +4,7 @@
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <ArduinoJson.h>
+#include "PCF8574.h"
 #include "eeprom_io.h"
 #include "http_handle.h"
 #include "generic_utils.h"
@@ -124,6 +125,7 @@ byte secondaryEepromReader = secondaryEepromAddress;
 
 byte lastKeyPress = NO_KEY;
 
+PCF8574 PCF_20(0x20);
 TM1638 ioMod(DIO, CLK, STB);
 ESP8266WebServer webServer(SERVER_LISTEN_PORT);
 
@@ -675,7 +677,6 @@ void setup() {
     Serial.println(F("\nDevice booting"));
   }
   
-  setupKeypadMatrixPins();
   ioMod.setupDisplay(true, brightness);
 
   byte initialDisplay[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
@@ -780,10 +781,11 @@ void loop() {
 
   delay(refreshSpeed);
 
-  lastKeyPress = decodeKeypad();
+  lastKeyPress = decodeKeypad(getKeyStates());
+//  if (lastKeyPress != NO_KEY) {
+//    Serial.println(keyMap[lastKeyPress]);
+//  }
   
-//  readEepromSettings(); // Very slow
-
   if (enableSerialConn == 1) {
     if (!Serial) {
       Serial.begin(serialConnSpeed);
