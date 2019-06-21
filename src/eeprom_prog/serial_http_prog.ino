@@ -182,7 +182,7 @@ void ICACHE_FLASH_ATTR commandToOpAndParam(char currentToken, byte ret[]) {
   ret[1] = 0;
   
   switch(currentToken) {
-    case OP_JMP: case OP_GETC: case OP_L2M: case OP_PI2CC: case OP_SI2CC: case OP_PERC: case OP_SERC: case OP_INT: case OP_ECH: case OP_CDMP: case OP_RET:
+    case OP_JMP: case OP_GETC: case OP_L2M: case OP_PI2CC: case OP_SI2CC: case OP_PERC: case OP_SERC: case OP_INT: case OP_ECH: case OP_CDMP: case OP_RET: case OP_DNUM:
       ret[1] = 1;
       break;
     
@@ -248,6 +248,10 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
     commandToOpAndParam(OP_RST, ret);
   } else if (strcmp(currentToken, STR_OP_STAT) == 0) {
     commandToOpAndParam(OP_STAT, ret);
+  } else if (strcmp(currentToken, STR_OP_MEM) == 0) {
+    commandToOpAndParam(OP_MEM, ret);
+  } else if (strcmp(currentToken, STR_OP_DNUM) == 0) {
+    commandToOpAndParam(OP_DNUM, ret);
   } else if (strcmp(currentToken, "nop") == 0) {
     commandToOpAndParam(OP_NOP, ret);
   } else if (strcmp(currentToken, "jmp") == 0) {
@@ -297,6 +301,10 @@ boolean ICACHE_FLASH_ATTR commandDecode(byte ret[], char currentToken[], byte re
     commandToOpAndParam(OP_CDMP, ret);
   } else if (strcmp(currentToken, "i2c") == 0) {
     commandToOpAndParam(OP_I2C, ret);
+  } else if (strcmp(currentToken, "mem") == 0) {
+    commandToOpAndParam(OP_MEM, ret);
+  } else if (strcmp(currentToken, "dnum") == 0) {
+    commandToOpAndParam(OP_DNUM, ret);
   } else if (strcmp(currentToken, "ret") == 0) {
     commandToOpAndParam(OP_RET, ret);
     if (remainingLength == 0) {
@@ -420,7 +428,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           sprintf(outputBuf, "0x%04x", params[0]);
           strcat(echoMessage, (const char*)outputBuf);
         }
-        const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, params[0], EEPROM_READ_FAILURE);
+        const byte readRes = exEepromReadByte(&memRead, primaryEepromPointer, params[0], EEPROM_READ_FAILURE);
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%04x", params[0]);
           strcat(resMessage, (const char*)outputBuf);
@@ -445,8 +453,8 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
       if (paramsLength == 2) {
         setNewAddress(params[0]);
-        exEepromWriteByte(primaryEepromReader, currentAddress, params[1] & 0xFF);
-        const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
+        exEepromWriteByte(primaryEepromPointer, currentAddress, params[1] & 0xFF);
+        const byte readRes = exEepromReadByte(&memRead, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%04x", currentAddress);
           strcat(resMessage, (const char*)outputBuf);
@@ -468,8 +476,8 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
         strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
-        exEepromWriteByte(primaryEepromReader, currentAddress, params[0] & 0xFF);
-        const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
+        exEepromWriteByte(primaryEepromPointer, currentAddress, params[0] & 0xFF);
+        const byte readRes = exEepromReadByte(&memRead, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%04x", currentAddress);
           strcat(resMessage, (const char*)outputBuf);
@@ -485,37 +493,13 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
     }
     break;
     case OP_PI2CC: {
-      if (paramsLength == 0) {
-        if (echoMessage != NULL) {
-          strcat_P(echoMessage, (const char*)F("pi2c"));
-        }
-        if (resMessage != NULL) {
-          sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
-          strcat(resMessage, (const char*)outputBuf);
-        }
-      }
-    }
-    break;
-    case OP_SI2CC: {
-      if (paramsLength == 0) {
-        if (echoMessage != NULL) {
-          strcat_P(echoMessage, (const char*)F("si2c"));
-        }
-        if (resMessage != NULL) {
-          sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
-          strcat(resMessage, (const char*)outputBuf);
-        }
-      }
-    }
-    break;
-    case OP_PI2C: {
       if (echoMessage != NULL) {
         strcat_P(echoMessage, (const char*)F("pi2c "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
         strcat(echoMessage, (const char*)outputBuf);
       }
       if (paramsLength == 1) {
-        primaryEepromAddress = params[0];
+        primaryEepromPointer = params[0];
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%02x", params[0]);
           strcat(resMessage, (const char*)outputBuf);
@@ -529,7 +513,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
     }
     break;
-    case OP_SI2C: {
+    case OP_SI2CC: {
       if (echoMessage != NULL) {
         strcat_P(echoMessage, (const char*)F("si2c "));
         sprintf(outputBuf, "0x%02x", params[0] & 0xFF);
@@ -550,13 +534,37 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
     }
     break;
+    case OP_PI2C: {
+      if (paramsLength == 0) {
+        if (echoMessage != NULL) {
+          strcat_P(echoMessage, (const char*)F("pi2c"));
+        }
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", primaryEepromPointer);
+          strcat(resMessage, (const char*)outputBuf);
+        }
+      }
+    }
+    break;
+    case OP_SI2C: {
+      if (paramsLength == 0) {
+        if (echoMessage != NULL) {
+          strcat_P(echoMessage, (const char*)F("si2c"));
+        }
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", secondaryEepromAddress);
+          strcat(resMessage, (const char*)outputBuf);
+        }
+      }
+    }
+    break;
     case OP_PERC: {
       if (paramsLength == 0) {
         if (echoMessage != NULL) {
           Serial.println(F("per"));
         }
         if (resMessage != NULL) {
-          sprintf(outputBuf, "0x%02x", primaryEepromReader);
+          sprintf(outputBuf, "0x%02x", primaryEepromPointer);
           strcat(resMessage, (const char*)outputBuf);
         }
       }
@@ -570,19 +578,19 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
       if (paramsLength == 1) {
         if (params[0] == 0x00) {
-          primaryEepromReader = EEPROM_INTERNAL_ADDR;
+          primaryEepromPointer = EEPROM_INTERNAL_ADDR;
         } else if (params[0] == 0x01) {
-          primaryEepromReader = primaryEepromAddress;
+          primaryEepromPointer = primaryEepromAddress;
         } else if (params[0] == 0x02) {
-          primaryEepromReader = secondaryEepromAddress;
+          primaryEepromPointer = secondaryEepromAddress;
         } else {
-          primaryEepromReader = primaryEepromAddress;
+          primaryEepromPointer = primaryEepromAddress;
         }
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%02x", params[0]);
           strcat(resMessage, (const char*)outputBuf);
           strcat_P(resMessage, (const char*)F("; "));
-          sprintf(outputBuf, "0x%02x", primaryEepromReader);
+          sprintf(outputBuf, "0x%02x", primaryEepromPointer);
           strcat(resMessage, (const char*)outputBuf);
         }
         delay(10);
@@ -600,7 +608,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           strcat_P(echoMessage, (const char*)F("ser "));
         }
         if (resMessage != NULL) {
-          sprintf(outputBuf, "0x%02x", secondaryEepromReader);
+          sprintf(outputBuf, "0x%02x", secondaryEepromPointer);
           strcat(resMessage, (const char*)outputBuf);
         }
       }
@@ -614,19 +622,19 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
       }
       if (paramsLength == 1) {
         if (params[0] == 0x00) {
-          secondaryEepromReader = EEPROM_INTERNAL_ADDR;
+          secondaryEepromPointer = EEPROM_INTERNAL_ADDR;
         } else if (params[0] == 0x01) {
-          secondaryEepromReader = primaryEepromAddress;
+          secondaryEepromPointer = primaryEepromAddress;
         } else if (params[0] == 0x02) {
-          secondaryEepromReader = secondaryEepromAddress;
+          secondaryEepromPointer = secondaryEepromAddress;
         } else {
-          secondaryEepromReader = secondaryEepromAddress;
+          secondaryEepromPointer = secondaryEepromAddress;
         }
         if (resMessage != NULL) {
           sprintf(outputBuf, "0x%02x", params[0]);
           strcat(resMessage, (const char*)outputBuf);
           strcat(resMessage, (const char*)F("; "));
-          sprintf(outputBuf, "0x%02x", secondaryEepromReader);
+          sprintf(outputBuf, "0x%02x", secondaryEepromPointer);
           strcat(resMessage, (const char*)outputBuf);
         }
         delay(10);
@@ -654,8 +662,8 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           setNewAddress(startAddress + memAddrOffset);
           readAndDisplayMemory();
           readAndDisplayAddress();
-          const byte readRes = exEepromReadByte(&tmpMem, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
-          exEepromWriteByte(secondaryEepromReader, currentAddress, params[0] & 0xFF);
+          const byte readRes = exEepromReadByte(&tmpMem, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
+          exEepromWriteByte(secondaryEepromPointer, currentAddress, params[0] & 0xFF);
           ioMod.setDisplay(currentScreenValue);
           if (resMessage != NULL) {
             sprintf(outputBuf, "0x%02x ", tmpMem);
@@ -741,7 +749,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           setNewAddress(params[0] + memAddrOffset);
           readAndDisplayMemory();
           readAndDisplayAddress();
-          const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
+          const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
           ioMod.setDisplay(currentScreenValue);
           if (resMessage != NULL) {
             sprintf(outputBuf, "0x%02x ", tmpMemVal);
@@ -778,7 +786,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           setNewAddress(startAddress + memAddrOffset);
           readAndDisplayMemory();
           readAndDisplayAddress();
-          const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
+          const byte readRes = exEepromReadByte(&tmpMemVal, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
           ioMod.setDisplay(currentScreenValue);
           if (resMessage != NULL) {
             sprintf(outputBuf, "0x%02x ", tmpMemVal);
@@ -867,6 +875,42 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
           }
           strcat_P(resMessage, (const char*)F("\n"));
         }
+      }
+    }
+    break;
+    case OP_MEM: {
+      if (echoMessage != NULL) {
+        strcat_P(echoMessage, (const char*)F("mem"));
+      }
+      bool loadedMemory = readEepromSettings();
+      if (resMessage != NULL) {
+        sprintf(outputBuf, "0x%02x", loadedMemory);
+        strcat(resMessage, (const char*)outputBuf);
+        strcat_P(resMessage, (const char*)F("; "));
+        strcat_P(resMessage, loadedMemory ? (const char*)F("true") : (const char*)F("false"));
+      }
+    }
+    break;
+    case OP_DNUM: {
+      if (paramsLength == 1) {
+        useNumeric = params[0];
+        if (echoMessage != NULL) {
+          strcat_P(echoMessage, (const char*)F("dnum "));
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(echoMessage, (const char*)outputBuf);
+        }
+        if (resMessage != NULL) {
+          sprintf(outputBuf, "0x%02x", params[0]);
+          strcat(resMessage, (const char*)outputBuf);
+          strcat_P(resMessage, (const char*)F("; "));
+          strcat_P(resMessage, useNumeric != 0 ? (const char*)F("true") : (const char*)F("false"));
+        }
+        delay(10);
+      } else {
+        if (errorMessage != NULL) {
+          strcat_P(errorMessage, (const char*)F("err 15; dnum ("STR_OP_DNUM") takes 1 param"));
+        }
+        break;
       }
     }
     break;

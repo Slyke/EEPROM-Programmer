@@ -11,7 +11,7 @@ void ICACHE_FLASH_ATTR exEepromWriteByte(int deviceAddress, unsigned int memAddr
 
 byte ICACHE_FLASH_ATTR exEepromReadByte(byte* res, int deviceAddress, unsigned int memAddress, byte defaultValue) {
   *res = defaultValue;
-  delay(25);
+  delay(10);
   Wire.beginTransmission(deviceAddress);
   Wire.write((int)(memAddress >> 8)); // MSB
   Wire.write((int)(memAddress & 0xFF)); // LSB
@@ -19,7 +19,7 @@ byte ICACHE_FLASH_ATTR exEepromReadByte(byte* res, int deviceAddress, unsigned i
   Wire.requestFrom(deviceAddress, 1);
   if (Wire.available()) {
     *res = Wire.read();
-    delay(25);
+    delay(10);
     return 0;
   }
   delay(25);

@@ -12,8 +12,6 @@
 #include "keypad_handler.h"
 #include "screen_handle.h"
 
-// #define EZ_MODE
-
 #define STB D7
 #define CLK D6
 #define DIO D5
@@ -27,6 +25,9 @@
 
 #define EE_ENABLE_SERIAL_LOC 3
 #define EE_ENABLE_SERIAL_LEN 1
+
+#define EE_USE_NUMERIC_LOC 4
+#define EE_USE_NUMERIC_LEN 1
 
 #define EE_DISABLE_TRANSCE_LOC 6
 #define EE_DISABLE_TRANSCE_LEN 1
@@ -105,6 +106,8 @@ unsigned char currentScreenValue[SEGMENT_COUNT] = {0, 0, 0, 0, 0, 0, 0, 0 };
 byte scanC = 0;
 byte scanR = 0;
 
+byte loopCount = 1;
+
 // Runtime vars read from EEPROM
 String SSID = "Not set";
 String PSK = "";
@@ -115,13 +118,14 @@ int serialConnSpeed = 19200;
 byte disableTransceiver = 0;
 int refreshSpeed = REFRESH_SPEED;
 byte mdnsEnabled = 1;
+byte useNumeric = 1;
 byte webserverEnabled = 1;
 int webserverListenPort = SERVER_LISTEN_PORT;
 
 byte primaryEepromAddress = EEPROM_PRIMARY_DEFAULT_ADDR;
 byte secondaryEepromAddress = EEPROM_SECONDARY_DEFAULT_ADDR;
-byte primaryEepromReader = primaryEepromAddress;
-byte secondaryEepromReader = secondaryEepromAddress;
+byte primaryEepromPointer = primaryEepromAddress;
+byte secondaryEepromPointer = secondaryEepromAddress;
 
 byte lastKeyPress = NO_KEY;
 
@@ -137,6 +141,7 @@ bool ICACHE_FLASH_ATTR readEepromSettings() {
     exEepromReadByte(&wifiRetryTimes, EEPROM_INTERNAL_ADDR, EE_MAX_WIFI_TRIES_LOC, wifiRetryTimes);
     exEepromReadByte(&enableSerialConn, EEPROM_INTERNAL_ADDR, EE_ENABLE_SERIAL_LOC, enableSerialConn);
     exEepromReadByte(&disableTransceiver, EEPROM_INTERNAL_ADDR, EE_DISABLE_TRANSCE_LOC, disableTransceiver);
+    Serial.println(exEepromReadByte(&useNumeric, EEPROM_INTERNAL_ADDR, EE_USE_NUMERIC_LOC, useNumeric));
 
     readStringFromEeprom(&PSK, EEPROM_INTERNAL_ADDR, EE_STAPSK_LOC, EE_STAPSK_LEN);
     readStringFromEeprom(&SSID, EEPROM_INTERNAL_ADDR, EE_SSID_LOC, EE_SSID_LEN);
@@ -534,7 +539,7 @@ void ICACHE_FLASH_ATTR numericMemoryInput() {
   }
 
   if (ioMod.getButtons() == 0b10000000) {
-    exEepromWriteByte(primaryEepromReader, currentAddress, tempMemoryEdit);
+    exEepromWriteByte(primaryEepromPointer, currentAddress, tempMemoryEdit);
     setCurrentMode(BASIC_MEM_CTRL);
   }
 }
@@ -604,7 +609,7 @@ void ICACHE_FLASH_ATTR basicMemoryInput() {
   }
   
   if (ioMod.getButtons() == 0b10000000) {
-    exEepromWriteByte(primaryEepromReader, currentAddress, tempMemoryEdit);
+    exEepromWriteByte(primaryEepromPointer, currentAddress, tempMemoryEdit);
     setCurrentMode(BASIC_MEM_CTRL);
   }
   
@@ -670,11 +675,15 @@ bool ICACHE_FLASH_ATTR connectToWifi(void (*updateScr)(int)) {
 void setup() {
   Wire.begin();
 
-  readEepromSettings();
+  delay(10);
+  bool readSettings = readEepromSettings();
 
   if (enableSerialConn == 1) {
     Serial.begin(serialConnSpeed);
     Serial.println(F("\nDevice booting"));
+    if (!readSettings) {
+      Serial.println(F("Failed to read internal EEPROM."));
+    }
   }
   
   ioMod.setupDisplay(true, brightness);
@@ -782,9 +791,6 @@ void loop() {
   delay(refreshSpeed);
 
   lastKeyPress = decodeKeypad(getKeyStates());
-//  if (lastKeyPress != NO_KEY) {
-//    Serial.println(keyMap[lastKeyPress]);
-//  }
   
   if (enableSerialConn == 1) {
     if (!Serial) {
@@ -863,27 +869,5 @@ void loop() {
     readAndDisplayMemory();
   }
 
-  if (serialDebugOutput && currentMode != SERIAL_COMMAND) {
-    Serial.print("\n \nScreen Data: ");
-    Serial.print(currentScreenValue[0], HEX);
-    Serial.print(currentScreenValue[1], HEX);
-    Serial.print(currentScreenValue[2], HEX);
-    Serial.print(currentScreenValue[3], HEX);
-    Serial.print(currentScreenValue[4], HEX);
-    Serial.print(currentScreenValue[5], HEX);
-    Serial.print(currentScreenValue[6], HEX);
-    Serial.print(currentScreenValue[7], HEX);
-    Serial.print(currentScreenValue[8], HEX);
-    Serial.print(F("\nCurrent Address: "));
-    Serial.print(currentAddress, HEX);
-    Serial.print(F("\nCurrent Memory: "));
-    Serial.print(memRead, HEX);
-    Serial.print(F("\nCurrent Mode: "));
-    Serial.print(currentMode, HEX);
-    if (lastKeyPress != NO_KEY) {
-      Serial.print(F("\nLast Keypin Pressed: "));
-      Serial.println(lastKeyPress, HEX);
-    }
-    Serial.println(" ");
-  }
+  loopCount = ((loopCount + 1) % 254);
 }

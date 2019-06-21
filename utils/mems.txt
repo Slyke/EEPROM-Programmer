@@ -1,0 +1,161 @@
+
+// Weather station memory addresses
+#define EE_MAX_WIFI_TRIES_LOC 1
+#define EE_MAX_WIFI_TRIES_LEN 1
+
+#define EE_SERIAL_OUT_REQUEST_DETAILS_LOC 2
+#define EE_SERIAL_OUT_REQUEST_DETAILS_LEN 1
+
+#define EE_ENABLE_SERIAL_LOC 3
+#define EE_ENABLE_SERIAL_LEN 1
+
+#define EE_ENABLE_OLED_LOC 4
+#define EE_ENABLE_OLED_LEN 1
+
+#define EE_I2C_SCAN_LOC 5
+#define EE_I2C_SCAN_LEN 1
+
+#define EE_DISABLE_TRANSCE_LOC 6
+#define EE_DISABLE_TRANSCE_LEN 1
+
+#define EE_SLEEP_MODE_LOC 7
+#define EE_SLEEP_MODE_LEN 1
+
+#define EE_DISABLE_POWER_WIFI_LED_LOC 8
+#define EE_DISABLE_POWER_WIFI_LED_LEN 1
+
+#define EE_SCROLL_ENABABLED_LOC 9
+#define EE_SCROLL_ENABABLED_LEN 1
+
+#define EE_SERIAL_DATA_MODE_LOC 10
+#define EE_SERIAL_DATA_MODE_LEN 1
+
+#define EE_SLEEP_TIMER_LOC 14
+#define EE_SLEEP_TIMER_LEN 4
+
+#define EE_HTTP_RX_CODE_LOC 20
+#define EE_HTTP_RX_CODE_LEN 4
+
+#define EE_SERIAL_CON_SPD_LOC 28
+#define EE_SERIAL_CON_SPD_LEN 8
+
+#define EE_STATION_ID_LOC 42
+#define EE_STATION_ID_LEN 16
+
+#define EE_SSID_LOC 128
+#define EE_SSID_LEN 64
+
+#define EE_STAPSK_LOC 256
+#define EE_STAPSK_LEN 64
+
+#define EE_TELEMERTY_POST_URL_LOC 384
+#define EE_TELEMERTY_POST_URL_LEN 128
+
+#define EE_I2C_POST_URL_LOC 512
+#define EE_I2C_POST_URL_LEN 128
+
+#define EE_GPS_LAT_LOC 1024
+#define EE_GPS_LAT_LEN 12
+
+#define EE_GPS_LNG_LOC 1036
+#define EE_GPS_LNG_LEN 12
+
+#define EE_GPS_ALT_LOC 1048
+#define EE_GPS_ALT_LEN 8
+
+#define EE_READ_GOOD_LOC 777
+#define EE_READ_GOOD_LEN 1
+#define EE_PROM_VERSION 0x77
+
+
+
+// EEPROM Programmer memory addresses:
+#define EE_MAX_WIFI_TRIES_LOC 1
+#define EE_MAX_WIFI_TRIES_LEN 1
+
+#define EE_ENABLE_SERIAL_LOC 3
+#define EE_ENABLE_SERIAL_LEN 1
+
+#define EE_DISABLE_TRANSCE_LOC 6
+#define EE_DISABLE_TRANSCE_LEN 1
+
+#define EE_DISABLE_POWER_WIFI_LED_LOC 8
+#define EE_DISABLE_POWER_WIFI_LED_LEN 1
+
+#define EE_SCR_REFRESH_SPEED_LOC 10
+#define EE_SCR_REFRESH_SPEED_LEN 4
+
+#define EE_MDNS_ENABLED_LOC 16
+#define EE_MDNS_ENABLED_LEN 1
+
+#define EE_SERVER_ENABLED_LOC 17
+#define EE_SERVER_ENABLED_LEN 1
+
+#define EE_SERVER_LISTEN_PORT_LOC 18
+#define EE_SERVER_LISTEN_PORT_LEN 6
+
+#define EE_SERIAL_CON_SPD_LOC 28
+#define EE_SERIAL_CON_SPD_LEN 8
+
+#define EE_MDNS_NAME_LOC 38
+#define EE_MDNS_NAME_LEN 32
+
+#define EE_SSID_LOC 128
+#define EE_SSID_LEN 64
+
+#define EE_STAPSK_LOC 256
+#define EE_STAPSK_LEN 64
+
+#define EE_READ_GOOD_LOC 777
+#define EE_READ_GOOD_LEN 1
+#define EE_PROM_VERSION 0x77
+
+Note: Unless otherwise specified, all commands act only on the primary reader's address (Never on secondary).
+OP Codes:
+0x00 nop                  // Nop
+0x01 jmp                  // Jump
+0x02 aic                  // Inc address
+0x03 adc                  // Dec address
+0x04 get                  // Get value at current address
+0x05 get [addr]           // Get value at given address
+0x06 mov [addr] [val]     // Move given value into given address, and jmp to it
+0x07 l2m [val]            // Move given value into current address
+0xd1 pi2c [i2cAddr]       // Set I2C Address of primary EEPROM device reader
+0xd2 si2c [i2cAddr]       // Set I2C Address of secondary EEPROM device reader
+0xd3 pi2c                 // Get I2C Address of primary EEPROM device reader
+0xd4 si2c                 // Get I2C Address of secondary EEPROM device reader
+0xd6 per [p]              // Set primary reader to Primary (0x01), secondary (0x02), or internal (0x00) eeprom address. (Primary Eeprom Reader)
+0xd7 per                  // Get primary reader eeprom address. (Primary Eeprom Reader)
+0xd8 ser [p]              // Set secondary reader to Primary (0x01), secondary (0x02), or internal (0x00) eeprom address. (Secondary Eeprom Reader)
+0xd9 ser                  // Get secondary reader eeprom address. (Secondary Eeprom Reader)
+0xda pcpy [addr] [count]  // Copy COUNT amount of bytes from given address in reader (set in op: 0xd5) EEPROM to secondary EEPROM from same given address
+0xe0 int [p]              // Turn on (0x01) or off (0x00) interpret model
+0xe1 ech [p]              // Turn on (0x01) or off (0x00) echo mode
+0xe2 admp [addr] [count]  // Read COUNT amount of bytes from given address
+0xe3 cdmp [count]         // Read COUNT amount of bytes from current address
+0xf0 ret                  // Return to default run mode
+0xf1 ret [p]              // Set current run mode
+0xf4 i2c                  // I2C Scan
+0xf5 dnum                 // Use numberic numbers
+0xf8 mem                  // Reload internal EEPROM memory
+0xf9 rst                  // Reset device
+
+Simple Test (No ASM):
+ech 1; get; aic; get; get 1;
+0xe1 0x01 0x05 0x02 0x05 0x04 0x01
+{"ops": ["0xe1", "0x01", "0x05", "0x02", "0x05", "0x04", "0x01"]}
+
+
+int 0x00 // Interprit off; Direct execution mode
+0x06 0x100 0x74 0x06 0x101 0x68 0x06 0x102 0x69 0x06 0x103 0x72 0x06 0x104 0x73 0x06 0x105 0x74 0x06 0x106 0x79 0x06 0x107 0x64 0x06 0x108 0x69 0x06 0x109 0x61 0x06 0x10a 0x6d 0x06 0x10b 0x6f 0x06 0x10c 0x6e 0x06 0x10d 0x64 0x06 0x10e 0x36 0x06 0x10f 0x30 0x06 0x110 0x00
+
+
+
+
+0x06 0x100 0x74 0x06 0x101 0x68 0x06 0x102 0x69 
+0x06 0x103 0x72 0x06 0x104 0x73 0x06 0x105 0x74 
+0x06 0x106 0x79 0x06 0x107 0x64 0x06 0x108 0x69 
+0x06 0x109 0x61 0x06 0x10a 0x6d 0x06 0x10b 0x6f 
+0x06 0x10c 0x6e 0x06 0x10d 0x64 0x06 0x10e 0x36 
+0x06 0x10f 0x30 0x06 0x110 0x00
+

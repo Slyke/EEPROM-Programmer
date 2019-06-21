@@ -26,6 +26,8 @@
 #define OP_RETD 0xf0
 #define OP_RET 0xf1
 #define OP_I2C 0xf4
+#define OP_DNUM 0xf5
+#define OP_MEM 0xf8
 #define OP_RST 0xf9
 #define OP_STAT 0xfa
 #define STR_OP_NOP "0x00"
@@ -52,6 +54,8 @@
 #define STR_OP_RETD "0xf0"
 #define STR_OP_RET "0xf1"
 #define STR_OP_I2C "0xf4"
+#define STR_OP_DNUM "0xf5"
+#define STR_OP_MEM "0xf8"
 #define STR_OP_RST "0xf9"
 #define STR_OP_STAT "0xfa"
 

@@ -23,7 +23,7 @@ void ICACHE_FLASH_ATTR readAndDisplayAddress() {
 }
 
 void ICACHE_FLASH_ATTR readAndDisplayMemory() {
-  const byte readRes = exEepromReadByte(&memRead, primaryEepromReader, currentAddress, EEPROM_READ_FAILURE);
+  const byte readRes = exEepromReadByte(&memRead, primaryEepromPointer, currentAddress, EEPROM_READ_FAILURE);
   
   unsigned char *memBuffer = (unsigned char*)calloc(HALF_SEGMENT_COUNT, sizeof(char));
   breakIntToArray(memBuffer, (byte)memRead, modeHex);
@@ -49,8 +49,14 @@ void ICACHE_FLASH_ATTR updateScreen(unsigned char * value, boolean rightSide, bo
       currentScreenValue[i + indexOffset] = value[i];
     }
   } else {
-    for (unsigned int i = 0; i < HALF_SEGMENT_COUNT; i++) {
-      currentScreenValue[i + indexOffset] = bitsToChar((char *)sevenSegmentDisplay[value[i]], 8);
+    if (useNumeric == 0) {
+      for (unsigned int i = 0; i < HALF_SEGMENT_COUNT; i++) {
+        currentScreenValue[i + indexOffset] = bitsToChar((unsigned char *)sevenSegmentDisplayBinaric[value[i]], 8);
+      }
+    } else {
+      for (unsigned int i = 0; i < HALF_SEGMENT_COUNT; i++) {
+        currentScreenValue[i + indexOffset] = bitsToChar((unsigned char *)sevenSegmentDisplayNumeric[value[i]], 8);
+      }
     }
   }
 }

@@ -18,8 +18,7 @@ const unsigned char NoRes[4] = {18, 18, 18, 18};
 //       ----   .H
 //        D
 
-#ifdef EZ_MODE
-const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
+const unsigned char ICACHE_FLASH_ATTR sevenSegmentDisplayBinaric[48][8] = {
   //H G F E D C B A
   { 0,0,1,1,0,0,0,0 },  // = 0
   { 0,0,1,1,0,0,0,1 },  // = 1
@@ -70,8 +69,8 @@ const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
   { 0,1,1,1,1,0,0,1 },  // = E (Letter)
   { 1,1,1,1,1,0,0,1 }  // = E. (Letter)
 };
-#else
-const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
+
+const unsigned char ICACHE_FLASH_ATTR sevenSegmentDisplayNumeric[48][8] = {
   //H G F E D C B A
   { 0,0,1,1,1,1,1,1 },  // = 0
   { 0,0,0,0,0,1,1,0 },  // = 1
@@ -113,7 +112,7 @@ const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
   { 1,0,1,1,0,0,0,1 },  // = R.
   { 0,1,0,1,0,0,0,0 },  // = r
   { 1,1,0,1,0,0,0,0 },  // = r.
-  { 0,1,0,1,1,1,0,0 },  // = o
+  { 0,1,0,1,1,1,0,0 },  // = ofalse
   { 1,1,0,1,1,1,0,0 },  // = o.
   { 0,1,0,1,0,1,1,0 },  // = H
   { 1,1,0,1,0,1,1,0 },  // = H.
@@ -122,7 +121,6 @@ const byte ICACHE_FLASH_ATTR sevenSegmentDisplay[48][8] = {
   { 0,1,1,1,1,0,0,1 },  // = E (Letter)
   { 1,1,1,1,1,0,0,1 }  // = E. (Letter)
 };
-#endif
 
 unsigned int ICACHE_FLASH_ATTR setDigit(unsigned int inputNumber, byte newDigit, byte pos, byte radix);
 byte ICACHE_FLASH_ATTR getDigit(unsigned int inputNumber, byte loc, byte radix);

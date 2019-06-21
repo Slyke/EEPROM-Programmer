@@ -31,7 +31,7 @@ boolean isNthBitSet(int bitNumber, int nthBit) {
   return false;
 } 
 
-unsigned char ICACHE_FLASH_ATTR bitsToChar(char *bitArr, unsigned int arrSize) {
+unsigned char ICACHE_FLASH_ATTR bitsToChar(unsigned char *bitArr, unsigned int arrSize) {
   unsigned char res = 0;
 
   for (unsigned int i = 0; i < arrSize; i++) {
