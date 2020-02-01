@@ -1,15 +1,15 @@
 {
-  "name": "eeprom_utils",
+  "name": "eeprom_dup",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node index",
-    "convert": "node index"
+    "test": "echo \"Error: no test specified\" && exit 1"
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "express": "^4.17.1"
+    "request": "^2.88.0",
+    "request-promise": "^4.2.5"
   }
 }

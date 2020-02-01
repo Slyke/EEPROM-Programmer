@@ -437,7 +437,7 @@ void ICACHE_FLASH_ATTR execInputCommands(byte command, unsigned int *params, byt
         }
       } else {
         if (errorMessage != NULL) {
-          strcat_P(errorMessage, (const char*)F("err 3; get ("STR_OP_GET") takes 1 param"));
+          strcat_P(errorMessage, (const char*)F("err 3; get ("STR_OP_GETC") takes 1 param"));
         }
         break;
       }
